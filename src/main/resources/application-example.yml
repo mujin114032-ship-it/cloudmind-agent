@@ -1,0 +1,35 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: cloudmind-agent
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://生产数据库IP:3306/cloudmind_agent?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false
+    username: 数据库用户名
+    password: 数据库密码
+
+cloudmind:
+  embedding:
+    local:
+      base-url: http://127.0.0.1:9001
+      model: BAAI/bge-base-zh-v1.5
+      dimension: 768
+      batch-size: 32
+
+  milvus:
+    uri: http://127.0.0.1:19530
+    token: root:Milvus
+    collection-name: knowledge_chunk_vector
+    vector-field-name: embedding
+    primary-field-name: chunk_id
+    dimension: 768
+
+  llm:
+    openai-compatible:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: key
+      model: qwen-plus
+      timeout-seconds: 60
