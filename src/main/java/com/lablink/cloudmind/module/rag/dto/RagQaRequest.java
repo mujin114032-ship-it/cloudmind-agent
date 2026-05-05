@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 /**
- * 普通 RAG 问答请求。
+ * 普通问答、SSE 问答、会话问答请求。
  */
 @Data
 public class RagQaRequest {
@@ -15,4 +15,11 @@ public class RagQaRequest {
     private Integer topK = 5;
 
     private Double scoreThreshold = 0.3;
+
+    /**
+     * Prompt 模板版本。
+     *
+     * <p>为空时使用后端默认版本。</p>
+     */
+    private String promptVersion;
 }

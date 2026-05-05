@@ -112,6 +112,25 @@ public class DocumentChunkServiceImpl extends ServiceImpl<DocumentChunkMapper, D
                 .list();
     }
 
+    @Override
+    public List<DocumentChunk> listEnabledChunksByDocumentAndIndexRange(
+            Long documentId,
+            Integer startIndex,
+            Integer endIndex
+    ) {
+        if (documentId == null || startIndex == null || endIndex == null) {
+            return List.of();
+        }
+
+        return this.lambdaQuery()
+                .eq(DocumentChunk::getDocumentId, documentId)
+                .eq(DocumentChunk::getEnabled, 1)
+                .ge(DocumentChunk::getChunkIndex, Math.max(startIndex, 0))
+                .le(DocumentChunk::getChunkIndex, endIndex)
+                .orderByAsc(DocumentChunk::getChunkIndex)
+                .list();
+    }
+
     private DocumentChunkVO convertToVO(DocumentChunk chunk) {
         DocumentChunkVO vo = new DocumentChunkVO();
         vo.setChunkId(String.valueOf(chunk.getId()));

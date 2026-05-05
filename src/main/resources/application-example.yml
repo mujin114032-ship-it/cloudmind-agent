@@ -33,3 +33,13 @@ cloudmind:
       api-key: key
       model: qwen-plus
       timeout-seconds: 60
+
+  rag:
+    query-rewrite-enabled: true         # 是否开启查询重写
+    chat-history-rewrite-enabled: true  # 是否开启聊天历史重写
+    query-rewrite-history-limit: 6      # 查询重写历史记录限制
+    query-rewrite-max-length: 300      # 改写问题最大长度
+    context-expansion-enabled: true     # 是否开启上下文扩展
+    context-window-before: 1            # 上下文扩展前向窗口大小
+    context-window-after: 1             # 上下文扩展后向窗口大小
+    max-context-chunks: 20              # 最大上下文块数

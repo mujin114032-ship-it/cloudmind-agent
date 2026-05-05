@@ -20,4 +20,10 @@ public interface DocumentChunkService extends IService<DocumentChunk> {
     void markChunksVectorized(List<DocumentChunk> chunks);
 
     List<DocumentChunk> listByChunkIds(List<Long> chunkIds);
+
+    List<DocumentChunk> listEnabledChunksByDocumentAndIndexRange(
+            Long documentId,
+            Integer startIndex,
+            Integer endIndex
+    );
 }

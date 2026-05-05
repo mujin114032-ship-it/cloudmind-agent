@@ -11,13 +11,19 @@ import java.util.List;
 @Data
 public class RagQaVO {
 
+    private String traceId;
+
     private String knowledgeBaseId;
 
     private String question;
 
+    private String rewrittenQuestion;
+
     private String answer;
 
     private String modelName;
+
+    private String promptVersion;
 
     private List<RetrievedChunkVO> references;
 

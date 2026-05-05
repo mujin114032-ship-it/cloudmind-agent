@@ -31,6 +31,10 @@ public enum ErrorCode {
     VECTOR_STORE_ERROR(43002, "向量数据库操作失败"),
     LLM_SERVICE_ERROR(43003, "大模型服务调用失败"),
 
+    INGEST_TASK_NOT_FOUND(45001, "入库任务不存在"),
+    INGEST_TASK_RUNNING(45002, "文档入库任务正在执行中"),
+    DOCUMENT_ALREADY_INGESTED(45003, "文档已经入库成功"),
+
     SYSTEM_ERROR(50000, "系统内部异常");
 
     private final Integer code;

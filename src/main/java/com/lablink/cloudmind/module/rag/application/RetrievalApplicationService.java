@@ -8,8 +8,10 @@ import com.lablink.cloudmind.module.knowledge.entity.KnowledgeDocument;
 import com.lablink.cloudmind.module.knowledge.service.DocumentChunkService;
 import com.lablink.cloudmind.module.knowledge.service.KnowledgeBaseService;
 import com.lablink.cloudmind.module.knowledge.service.KnowledgeDocumentService;
+import com.lablink.cloudmind.module.rag.context.ContextExpansionService;
 import com.lablink.cloudmind.module.rag.dto.RetrievalTestRequest;
 import com.lablink.cloudmind.module.rag.dto.RetrievalTestVO;
+import com.lablink.cloudmind.module.rag.filter.RetrievalResultFilterService;
 import com.lablink.cloudmind.module.rag.model.RetrievedChunkVO;
 import com.lablink.cloudmind.module.vector.model.VectorSearchResult;
 import com.lablink.cloudmind.module.vector.service.VectorStoreService;
@@ -24,7 +26,7 @@ import java.util.stream.Collectors;
 /**
  * 检索应用服务。
  *
- * <p>负责串联：问题向量化 → Milvus 检索 → MySQL 回查 chunk 文本。</p>
+ * <p>负责串联：问题向量化 → Milvus topK → 基础分数过滤 → 命中 chunk 去重 → 限制单文档命中数量 → 相邻 Chunk 扩展 → 扩展结果再次去重 → 限制最终上下文数量 → Prompt。</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -36,6 +38,10 @@ public class RetrievalApplicationService {
 
     private final DocumentChunkService documentChunkService;
 
+    private final ContextExpansionService contextExpansionService;
+
+    private final RetrievalResultFilterService retrievalResultFilterService;
+
     private final EmbeddingClient embeddingClient;
 
     private final VectorStoreService vectorStoreService;
@@ -43,9 +49,9 @@ public class RetrievalApplicationService {
     public RetrievalTestVO retrievalTest(Long knowledgeBaseId, RetrievalTestRequest request) {
         long start = System.currentTimeMillis();
 
+        // 先校验知识库归属当前用户
         Long userId = UserContext.getCurrentUserId();
 
-        // 先校验知识库归属，避免跨用户检索。
         KnowledgeBase knowledgeBase = knowledgeBaseService.getCurrentUserKnowledgeBase(knowledgeBaseId);
 
         int topK = request.getTopK() == null || request.getTopK() <= 0 ? 5 : request.getTopK();
@@ -60,11 +66,11 @@ public class RetrievalApplicationService {
                 topK
         );
 
-        List<VectorSearchResult> filteredResults = vectorResults.stream()
+        List<VectorSearchResult> filteredVectorResults = vectorResults.stream()
                 .filter(item -> item.getScore() != null && item.getScore() >= scoreThreshold)
                 .toList();
 
-        List<Long> chunkIds = filteredResults.stream()
+        List<Long> chunkIds = filteredVectorResults.stream()
                 .map(VectorSearchResult::getChunkId)
                 .toList();
 
@@ -72,19 +78,34 @@ public class RetrievalApplicationService {
                 .stream()
                 .collect(Collectors.toMap(DocumentChunk::getId, item -> item));
 
-        List<RetrievedChunkVO> results = filteredResults.stream()
+        List<RetrievedChunkVO> rawHitChunks = filteredVectorResults.stream()
                 .map(item -> buildRetrievedChunkVO(item, chunkMap.get(item.getChunkId())))
                 .filter(item -> item != null)
-                .sorted(Comparator.comparing(RetrievedChunkVO::getScore).reversed())
                 .toList();
+
+        // 1. 对向量直接命中结果做去重、低分过滤、单文档数量限制
+        List<RetrievedChunkVO> filteredHitChunks = retrievalResultFilterService.filterHitChunks(
+                rawHitChunks,
+                scoreThreshold
+        );
+
+        // 2. 对过滤后的命中结果做相邻 chunk 扩展
+        List<RetrievedChunkVO> expandedContextChunks = contextExpansionService.expand(filteredHitChunks);
+
+        // 3. 对扩展后的上下文再次做去重和数量截断
+        List<RetrievedChunkVO> finalContextChunks = retrievalResultFilterService.filterContextChunks(
+                expandedContextChunks
+        );
 
         RetrievalTestVO vo = new RetrievalTestVO();
         vo.setKnowledgeBaseId(String.valueOf(knowledgeBaseId));
         vo.setQuery(request.getQuery());
         vo.setTopK(topK);
-        vo.setResultCount(results.size());
+        vo.setHitCount(filteredHitChunks.size());
+        vo.setContextCount(finalContextChunks.size());
+        vo.setResultCount(finalContextChunks.size());
         vo.setCostMs(System.currentTimeMillis() - start);
-        vo.setResults(results);
+        vo.setResults(finalContextChunks);
         return vo;
     }
 
@@ -101,6 +122,10 @@ public class RetrievalApplicationService {
         vo.setFileName(document == null ? null : document.getFileName());
         vo.setChunkIndex(chunk.getChunkIndex());
         vo.setScore(result.getScore());
+        vo.setHit(true);
+        vo.setSourceChunkId(String.valueOf(chunk.getId()));
+        vo.setDistance(0);
+        vo.setChunkHash(chunk.getChunkHash());
         vo.setChunkText(chunk.getChunkText());
         vo.setTextPreview(buildPreview(chunk.getChunkText()));
         return vo;

@@ -17,6 +17,19 @@ public class RetrievalTestVO {
 
     private Integer topK;
 
+    /**
+     * Milvus 直接命中的 chunk 数。
+     */
+    private Integer hitCount;
+
+    /**
+     * 相邻扩展后的上下文 chunk 数。
+     */
+    private Integer contextCount;
+
+    /**
+     * 兼容原字段，当前等于 contextCount。
+     */
     private Integer resultCount;
 
     private Long costMs;
