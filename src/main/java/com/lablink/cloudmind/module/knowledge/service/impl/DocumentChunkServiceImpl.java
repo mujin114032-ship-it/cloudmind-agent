@@ -131,6 +131,38 @@ public class DocumentChunkServiceImpl extends ServiceImpl<DocumentChunkMapper, D
                 .list();
     }
 
+    @Override
+    public List<DocumentChunk> searchByKeywords(
+            Long knowledgeBaseId,
+            Long userId,
+            List<String> keywords,
+            Integer limit
+    ) {
+        if (keywords == null || keywords.isEmpty()) {
+            return List.of();
+        }
+
+        int safeLimit = limit == null || limit <= 0 ? 50 : Math.min(limit, 100);
+
+        return this.lambdaQuery()
+                .eq(DocumentChunk::getKnowledgeBaseId, knowledgeBaseId)
+                .eq(DocumentChunk::getUserId, userId)
+                .eq(DocumentChunk::getEnabled, 1)
+                .and(wrapper -> {
+                    for (int i = 0; i < keywords.size(); i++) {
+                        String keyword = keywords.get(i);
+                        if (i == 0) {
+                            wrapper.like(DocumentChunk::getChunkText, keyword);
+                        } else {
+                            wrapper.or().like(DocumentChunk::getChunkText, keyword);
+                        }
+                    }
+                })
+                .orderByAsc(DocumentChunk::getChunkIndex)
+                .last("LIMIT " + safeLimit)
+                .list();
+    }
+
     private DocumentChunkVO convertToVO(DocumentChunk chunk) {
         DocumentChunkVO vo = new DocumentChunkVO();
         vo.setChunkId(String.valueOf(chunk.getId()));

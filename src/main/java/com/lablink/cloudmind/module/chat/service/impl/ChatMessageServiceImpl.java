@@ -240,6 +240,9 @@ public class ChatMessageServiceImpl extends ServiceImpl<ChatMessageMapper, ChatM
         vo.setHit(reference.getHit() != null && reference.getHit() == 1);
         vo.setSourceChunkId(reference.getSourceChunkId() == null ? null : String.valueOf(reference.getSourceChunkId()));
         vo.setDistance(reference.getDistance());
+        vo.setRerankScore(reference.getRerankScore());
+        vo.setKeywordScore(reference.getKeywordScore());
+        vo.setRecallSource(reference.getRecallSource());
         vo.setRankNo(reference.getRankNo());
         vo.setScore(reference.getScore());
         vo.setTextPreview(reference.getTextPreview());
@@ -265,6 +268,9 @@ public class ChatMessageServiceImpl extends ServiceImpl<ChatMessageMapper, ChatM
                     ref.getSourceChunkId() == null ? null : Long.valueOf(ref.getSourceChunkId())
             );
             entity.setDistance(ref.getDistance());
+            entity.setRerankScore(ref.getRerankScore());
+            entity.setKeywordScore(ref.getKeywordScore());
+            entity.setRecallSource(ref.getRecallSource());
             entity.setRankNo(i + 1);
             entity.setScore(ref.getScore());
             entity.setTextPreview(ref.getTextPreview());

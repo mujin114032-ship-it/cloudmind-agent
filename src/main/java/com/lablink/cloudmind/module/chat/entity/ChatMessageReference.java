@@ -30,9 +30,15 @@ public class ChatMessageReference {
 
     private Integer distance;
 
+    private Double rerankScore;
+
     private Integer rankNo;
 
     private Double score;
+
+    private Double keywordScore; // 关键词分数
+
+    private String recallSource; // vector / keyword / hybrid
 
     private String textPreview;
 

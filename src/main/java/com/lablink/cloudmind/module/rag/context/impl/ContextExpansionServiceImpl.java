@@ -118,13 +118,16 @@ public class ContextExpansionServiceImpl implements ContextExpansionService {
 
         // 扩展 chunk 沿用触发扩展的命中 chunk 分数，方便前端展示和 Trace 分析。
         vo.setScore(sourceHit.getScore());
-
+        vo.setRerankScore(sourceHit.getRerankScore());
+        vo.setRerankRank(sourceHit.getRerankRank());
         vo.setHit(isHit);
         vo.setSourceChunkId(sourceHit.getChunkId());
         vo.setDistance(chunk.getChunkIndex() - sourceHit.getChunkIndex());
         vo.setChunkHash(chunk.getChunkHash());
         vo.setChunkText(chunk.getChunkText());
         vo.setTextPreview(buildPreview(chunk.getChunkText()));
+        vo.setKeywordScore(sourceHit.getKeywordScore());
+        vo.setRecallSource(sourceHit.getRecallSource());
 
         return vo;
     }

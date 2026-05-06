@@ -30,6 +30,12 @@ public class RagTraceChunk {
 
     private Integer distance;
 
+    private Double rerankScore;
+
+    private Double keywordScore; // 关键词分数
+
+    private String recallSource; // vector / keyword / hybrid
+
     private Integer rankNo;
 
     private Double score;

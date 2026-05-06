@@ -57,4 +57,24 @@ public class RetrievedChunkVO {
      * 文本预览，用于前端展示。
      */
     private String textPreview;
+
+    /**
+     * Reranker 重排分数。
+     */
+    private Double rerankScore;
+
+    /**
+     * Reranker 重排名次，仅对直接命中 chunk 有明确意义。
+     * 扩展 chunk 沿用其来源命中 chunk 的 rerankRank。
+     */
+    private Integer rerankRank;
+
+    /**
+     * 最终上下文顺序，即返回给前端和进入 Prompt 的顺序。
+     */
+    private Integer contextOrder;
+
+    private Double keywordScore; // 关键词分数
+
+    private String recallSource; // vector / keyword / hybrid
 }

@@ -73,4 +73,20 @@ public class RagProperties {
      * 是否启用回答后处理。
      */
     private Boolean answerPostProcessEnabled = true;
+
+    private Boolean rerankEnabled = true;
+
+    private Integer candidateTopK = 20;
+
+    private Integer rerankTopK = 5;
+
+    /**
+     * 是否启用混合检索。
+     */
+    private Boolean hybridSearchEnabled = true;
+
+    /**
+     * 关键词召回候选数量。
+     */
+    private Integer keywordCandidateTopK = 20;
 }

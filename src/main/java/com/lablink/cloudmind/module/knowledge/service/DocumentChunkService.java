@@ -26,4 +26,11 @@ public interface DocumentChunkService extends IService<DocumentChunk> {
             Integer startIndex,
             Integer endIndex
     );
+
+    List<DocumentChunk> searchByKeywords(
+            Long knowledgeBaseId,
+            Long userId,
+            List<String> keywords,
+            Integer limit
+    );
 }

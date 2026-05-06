@@ -24,13 +24,12 @@ public class RetrievalResultFilterServiceImpl implements RetrievalResultFilterSe
     @Override
     public List<RetrievedChunkVO> filterHitChunks(
             List<RetrievedChunkVO> hitChunks,
-            Double requestScoreThreshold
+            Double ignoredScoreThreshold
     ) {
         if (CollectionUtils.isEmpty(hitChunks)) {
             return List.of();
         }
 
-        double effectiveThreshold = effectiveScoreThreshold(requestScoreThreshold);
         int maxPerDocument = safePositive(ragProperties.getMaxHitChunksPerDocument(), 3);
 
         Set<String> dedupKeys = new HashSet<>();
@@ -39,10 +38,6 @@ public class RetrievalResultFilterServiceImpl implements RetrievalResultFilterSe
 
         for (RetrievedChunkVO chunk : hitChunks) {
             if (chunk == null) {
-                continue;
-            }
-
-            if (chunk.getScore() == null || chunk.getScore() < effectiveThreshold) {
                 continue;
             }
 

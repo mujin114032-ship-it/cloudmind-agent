@@ -8,19 +8,23 @@ import com.lablink.cloudmind.module.knowledge.entity.KnowledgeDocument;
 import com.lablink.cloudmind.module.knowledge.service.DocumentChunkService;
 import com.lablink.cloudmind.module.knowledge.service.KnowledgeBaseService;
 import com.lablink.cloudmind.module.knowledge.service.KnowledgeDocumentService;
+import com.lablink.cloudmind.module.rag.config.RagProperties;
 import com.lablink.cloudmind.module.rag.context.ContextExpansionService;
 import com.lablink.cloudmind.module.rag.dto.RetrievalTestRequest;
 import com.lablink.cloudmind.module.rag.dto.RetrievalTestVO;
 import com.lablink.cloudmind.module.rag.filter.RetrievalResultFilterService;
+import com.lablink.cloudmind.module.rag.keyword.KeywordSearchResult;
+import com.lablink.cloudmind.module.rag.keyword.KeywordSearchService;
 import com.lablink.cloudmind.module.rag.model.RetrievedChunkVO;
+import com.lablink.cloudmind.module.reranker.client.RerankerClient;
+import com.lablink.cloudmind.module.reranker.dto.RerankResponse;
 import com.lablink.cloudmind.module.vector.model.VectorSearchResult;
 import com.lablink.cloudmind.module.vector.service.VectorStoreService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -28,6 +32,7 @@ import java.util.stream.Collectors;
  *
  * <p>负责串联：问题向量化 → Milvus topK → 基础分数过滤 → 命中 chunk 去重 → 限制单文档命中数量 → 相邻 Chunk 扩展 → 扩展结果再次去重 → 限制最终上下文数量 → Prompt。</p>
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RetrievalApplicationService {
@@ -44,12 +49,17 @@ public class RetrievalApplicationService {
 
     private final EmbeddingClient embeddingClient;
 
+    private final RagProperties ragProperties;
+
+    private final RerankerClient rerankerClient;
+
     private final VectorStoreService vectorStoreService;
+
+    private final KeywordSearchService keywordSearchService;
 
     public RetrievalTestVO retrievalTest(Long knowledgeBaseId, RetrievalTestRequest request) {
         long start = System.currentTimeMillis();
 
-        // 先校验知识库归属当前用户
         Long userId = UserContext.getCurrentUserId();
 
         KnowledgeBase knowledgeBase = knowledgeBaseService.getCurrentUserKnowledgeBase(knowledgeBaseId);
@@ -57,45 +67,65 @@ public class RetrievalApplicationService {
         int topK = request.getTopK() == null || request.getTopK() <= 0 ? 5 : request.getTopK();
         double scoreThreshold = request.getScoreThreshold() == null ? 0.3 : request.getScoreThreshold();
 
+        int candidateTopK = Boolean.TRUE.equals(ragProperties.getRerankEnabled())
+                ? Math.max(topK, ragProperties.getCandidateTopK() == null ? 20 : ragProperties.getCandidateTopK())
+                : topK;
+
+        // 1. 向量召回
         float[] queryVector = embeddingClient.embedQuery(request.getQuery());
 
         List<VectorSearchResult> vectorResults = vectorStoreService.search(
                 knowledgeBase.getId(),
                 userId,
                 queryVector,
-                topK
+                candidateTopK
         );
 
+        // 2. 向量候选过滤：scoreThreshold 只在这里使用一次
         List<VectorSearchResult> filteredVectorResults = vectorResults.stream()
                 .filter(item -> item.getScore() != null && item.getScore() >= scoreThreshold)
                 .toList();
 
-        List<Long> chunkIds = filteredVectorResults.stream()
-                .map(VectorSearchResult::getChunkId)
-                .toList();
+        // 3. 关键词召回
+        List<KeywordSearchResult> keywordResults = Boolean.TRUE.equals(ragProperties.getHybridSearchEnabled())
+                ? keywordSearchService.search(
+                knowledgeBase.getId(),
+                userId,
+                request.getQuery(),
+                ragProperties.getKeywordCandidateTopK()
+        )
+                : List.of();
 
-        Map<Long, DocumentChunk> chunkMap = documentChunkService.listByChunkIds(chunkIds)
-                .stream()
-                .collect(Collectors.toMap(DocumentChunk::getId, item -> item));
+        // 4. 合并向量候选 + 关键词候选
+        List<RetrievedChunkVO> rawHitChunks = buildHybridCandidates(
+                filteredVectorResults,
+                keywordResults
+        );
 
-        List<RetrievedChunkVO> rawHitChunks = filteredVectorResults.stream()
-                .map(item -> buildRetrievedChunkVO(item, chunkMap.get(item.getChunkId())))
-                .filter(item -> item != null)
-                .toList();
-
-        // 1. 对向量直接命中结果做去重、低分过滤、单文档数量限制
-        List<RetrievedChunkVO> filteredHitChunks = retrievalResultFilterService.filterHitChunks(
+        // 5. Reranker 对混合候选统一重排
+        List<RetrievedChunkVO> rerankedHitChunks = applyRerank(
+                request.getQuery(),
                 rawHitChunks,
+                topK
+        );
+
+        // 6. 这里只做去重、单文档限制，不再按 scoreThreshold 过滤
+        List<RetrievedChunkVO> filteredHitChunks = retrievalResultFilterService.filterHitChunks(
+                rerankedHitChunks,
                 scoreThreshold
         );
 
-        // 2. 对过滤后的命中结果做相邻 chunk 扩展
+        // 7. 相邻 Chunk 扩展
         List<RetrievedChunkVO> expandedContextChunks = contextExpansionService.expand(filteredHitChunks);
 
-        // 3. 对扩展后的上下文再次做去重和数量截断
+        // 8. 扩展结果最终去重与截断
         List<RetrievedChunkVO> finalContextChunks = retrievalResultFilterService.filterContextChunks(
                 expandedContextChunks
         );
+
+        for (int i = 0; i < finalContextChunks.size(); i++) {
+            finalContextChunks.get(i).setContextOrder(i + 1);
+        }
 
         RetrievalTestVO vo = new RetrievalTestVO();
         vo.setKnowledgeBaseId(String.valueOf(knowledgeBaseId));
@@ -107,6 +137,76 @@ public class RetrievalApplicationService {
         vo.setCostMs(System.currentTimeMillis() - start);
         vo.setResults(finalContextChunks);
         return vo;
+    }
+
+    private List<RetrievedChunkVO> buildHybridCandidates(
+            List<VectorSearchResult> vectorResults,
+            List<KeywordSearchResult> keywordResults
+    ) {
+        Map<Long, VectorSearchResult> vectorResultMap = vectorResults == null
+                ? Map.of()
+                : vectorResults.stream()
+                .collect(Collectors.toMap(
+                        VectorSearchResult::getChunkId,
+                        item -> item,
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+
+        Map<Long, KeywordSearchResult> keywordResultMap = keywordResults == null
+                ? Map.of()
+                : keywordResults.stream()
+                .collect(Collectors.toMap(
+                        KeywordSearchResult::getChunkId,
+                        item -> item,
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+
+        Set<Long> allChunkIds = new LinkedHashSet<>();
+        allChunkIds.addAll(vectorResultMap.keySet());
+        allChunkIds.addAll(keywordResultMap.keySet());
+
+        if (allChunkIds.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, DocumentChunk> chunkMap = documentChunkService.listByChunkIds(new ArrayList<>(allChunkIds))
+                .stream()
+                .collect(Collectors.toMap(DocumentChunk::getId, item -> item));
+
+        List<RetrievedChunkVO> candidates = new ArrayList<>();
+
+        for (Long chunkId : allChunkIds) {
+            DocumentChunk chunk = chunkMap.get(chunkId);
+            if (chunk == null) {
+                continue;
+            }
+
+            VectorSearchResult vectorResult = vectorResultMap.get(chunkId);
+            KeywordSearchResult keywordResult = keywordResultMap.get(chunkId);
+
+            RetrievedChunkVO vo = buildRetrievedChunkVO(vectorResult, chunk);
+            if (vo == null) {
+                continue;
+            }
+
+            if (keywordResult != null) {
+                vo.setKeywordScore(keywordResult.getKeywordScore());
+            }
+
+            if (vectorResult != null && keywordResult != null) {
+                vo.setRecallSource("hybrid");
+            } else if (vectorResult != null) {
+                vo.setRecallSource("vector");
+            } else {
+                vo.setRecallSource("keyword");
+            }
+
+            candidates.add(vo);
+        }
+
+        return candidates;
     }
 
     private RetrievedChunkVO buildRetrievedChunkVO(VectorSearchResult result, DocumentChunk chunk) {
@@ -121,7 +221,10 @@ public class RetrievalApplicationService {
         vo.setDocumentId(String.valueOf(chunk.getDocumentId()));
         vo.setFileName(document == null ? null : document.getFileName());
         vo.setChunkIndex(chunk.getChunkIndex());
-        vo.setScore(result.getScore());
+
+        // keyword-only 候选没有向量分数
+        vo.setScore(result == null ? null : result.getScore());
+
         vo.setHit(true);
         vo.setSourceChunkId(String.valueOf(chunk.getId()));
         vo.setDistance(0);
@@ -129,6 +232,53 @@ public class RetrievalApplicationService {
         vo.setChunkText(chunk.getChunkText());
         vo.setTextPreview(buildPreview(chunk.getChunkText()));
         return vo;
+    }
+
+    private List<RetrievedChunkVO> applyRerank(
+            String query,
+            List<RetrievedChunkVO> rawHitChunks,
+            Integer topK
+    ) {
+        if (!Boolean.TRUE.equals(ragProperties.getRerankEnabled())) {
+            return rawHitChunks.stream()
+                    .limit(topK)
+                    .toList();
+        }
+
+        if (rawHitChunks == null || rawHitChunks.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> documents = rawHitChunks.stream()
+                .map(RetrievedChunkVO::getChunkText)
+                .toList();
+
+        RerankResponse rerankResponse = rerankerClient.rerank(query, documents, topK);
+
+        if (rerankResponse == null || rerankResponse.getResults() == null || rerankResponse.getResults().isEmpty()) {
+            return rawHitChunks.stream()
+                    .limit(topK)
+                    .toList();
+        }
+
+        List<RetrievedChunkVO> reranked = new java.util.ArrayList<>();
+
+        int rank = 1;
+
+        for (RerankResponse.RerankItem item : rerankResponse.getResults()) {
+            Integer index = item.getIndex();
+
+            if (index == null || index < 0 || index >= rawHitChunks.size()) {
+                continue;
+            }
+
+            RetrievedChunkVO chunk = rawHitChunks.get(index);
+            chunk.setRerankScore(item.getScore());
+            chunk.setRerankRank(rank++);
+            reranked.add(chunk);
+        }
+
+        return reranked;
     }
 
     private String buildPreview(String text) {

@@ -92,6 +92,9 @@ public class RagTraceServiceImpl extends ServiceImpl<RagTraceMapper, RagTrace>
                     chunk.getSourceChunkId() == null ? null : Long.valueOf(chunk.getSourceChunkId())
             );
             traceChunk.setDistance(chunk.getDistance());
+            traceChunk.setRerankScore(chunk.getRerankScore());
+            traceChunk.setKeywordScore(chunk.getKeywordScore());
+            traceChunk.setRecallSource(chunk.getRecallSource());
             traceChunk.setRankNo(i + 1);
             traceChunk.setScore(chunk.getScore());
             traceChunk.setTextPreview(chunk.getTextPreview());
@@ -218,6 +221,9 @@ public class RagTraceServiceImpl extends ServiceImpl<RagTraceMapper, RagTrace>
         vo.setHit(chunk.getHit() != null && chunk.getHit() == 1);
         vo.setSourceChunkId(chunk.getSourceChunkId() == null ? null : String.valueOf(chunk.getSourceChunkId()));
         vo.setDistance(chunk.getDistance());
+        vo.setRerankScore(chunk.getRerankScore());
+        vo.setKeywordScore(chunk.getKeywordScore());
+        vo.setRecallSource(chunk.getRecallSource());
         vo.setRankNo(chunk.getRankNo());
         vo.setScore(chunk.getScore());
         vo.setTextPreview(chunk.getTextPreview());

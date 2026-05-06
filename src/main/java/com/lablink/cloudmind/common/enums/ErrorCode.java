@@ -20,16 +20,17 @@ public enum ErrorCode {
     FILE_TYPE_NOT_SUPPORTED(42002, "暂不支持该文件类型"),
     FILE_STORAGE_ERROR(42003, "文件存储失败"),
 
+    EMBEDDING_SERVICE_ERROR(43001, "向量化服务调用失败"),
+    VECTOR_STORE_ERROR(43002, "向量数据库操作失败"),
+    LLM_SERVICE_ERROR(43003, "大模型服务调用失败"),
+    EMBEDDING_DIMENSION_MISMATCH(43004, "向量维度不匹配"),
+    RERANKER_SERVICE_ERROR(43005, "Reranker 服务异常"),
+
     DOCUMENT_PARSE_ERROR(44001, "文档解析失败"),
     DOCUMENT_NOT_PARSEABLE(44002, "当前文档没有可解析的文件内容"),
     DOCUMENT_CHUNK_EMPTY(44003, "文档解析结果为空"),
     DOCUMENT_NOT_PARSED(44004, "文档尚未解析成功"),
     DOCUMENT_CHUNK_NOT_FOUND(44005, "文档分块不存在"),
-    EMBEDDING_DIMENSION_MISMATCH(43004, "向量维度不匹配"),
-
-    EMBEDDING_SERVICE_ERROR(43001, "向量化服务调用失败"),
-    VECTOR_STORE_ERROR(43002, "向量数据库操作失败"),
-    LLM_SERVICE_ERROR(43003, "大模型服务调用失败"),
 
     INGEST_TASK_NOT_FOUND(45001, "入库任务不存在"),
     INGEST_TASK_RUNNING(45002, "文档入库任务正在执行中"),
