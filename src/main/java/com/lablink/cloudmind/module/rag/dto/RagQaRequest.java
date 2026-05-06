@@ -22,4 +22,11 @@ public class RagQaRequest {
      * <p>为空时使用后端默认版本。</p>
      */
     private String promptVersion;
+
+    /**
+     * 检索模式：fast / balanced / quality。
+     *
+     * <p>为空时使用后端默认模式。</p>
+     */
+    private String searchMode;
 }

@@ -124,6 +124,7 @@ public class RagQaApplicationService {
             vo.setRetrievalCostMs(retrievalCostMs);
             vo.setLlmCostMs(llmCostMs);
             vo.setTotalCostMs(totalCostMs);
+            vo.setSearchMode(retrievalResult.getSearchMode());
 
             return vo;
         } catch (Exception ex) {

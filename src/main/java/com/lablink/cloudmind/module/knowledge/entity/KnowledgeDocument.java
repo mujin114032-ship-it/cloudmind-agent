@@ -53,4 +53,19 @@ public class KnowledgeDocument {
     private String storagePath;
 
     private String contentType;
+
+    /**
+     * 文档来源：upload / lablink_file / remote_url。
+     */
+    private String sourceType;
+
+    /**
+     * 外部系统文件 ID，例如 LabLink 的 fileId。
+     */
+    private String externalFileId;
+
+    /**
+     * 外部文件 URL，远程导入时使用。
+     */
+    private String externalFileUrl;
 }

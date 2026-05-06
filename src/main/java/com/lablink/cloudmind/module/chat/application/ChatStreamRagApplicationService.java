@@ -120,6 +120,7 @@ public class ChatStreamRagApplicationService {
                 requestPromptVersion,
                 topK,
                 scoreThreshold,
+                request.getSearchMode(),
                 totalStart,
                 emitter
         ));
@@ -136,6 +137,7 @@ public class ChatStreamRagApplicationService {
             String requestPromptVersion,
             int topK,
             double scoreThreshold,
+            String searchMode,
             long totalStart,
             SseEmitter emitter
     ) {
@@ -158,6 +160,7 @@ public class ChatStreamRagApplicationService {
             retrievalRequest.setQuery(rewrittenQuestion);
             retrievalRequest.setTopK(topK);
             retrievalRequest.setScoreThreshold(scoreThreshold);
+            retrievalRequest.setSearchMode(searchMode);
 
             long retrievalStart = System.currentTimeMillis();
             RetrievalTestVO retrievalResult = retrievalApplicationService.retrievalTest(

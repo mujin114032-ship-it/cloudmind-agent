@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
  */
 @Data
 @Component
-@ConfigurationProperties(prefix = "cloudmind.llm.openai-compatible")
+@ConfigurationProperties(prefix = "cloudmind.ai.llm.openai-compatible")
 public class LlmProperties {
 
     private String baseUrl;

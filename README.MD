@@ -213,11 +213,20 @@ Milvus 命中 chunk ➔ 扩展前后相邻 chunk ➔ 去重与截断 ➔ 进入 
 
 ---
 
+### RAG 检索增强与工程化重构
+
+在基础 RAG 闭环之上，系统进一步完成了检索增强与工程化重构：
+
+1. 接入 Reranker 重排机制，在 Milvus 粗召回后对 query 与候选 chunk 进行相关性重排，提高候选片段排序质量。
+2. 将 Embedding 与 Reranker 整合为统一的 CloudMind AI Service，减少本地开发时需要启动的模型服务数量。
+3. 实现 Hybrid Search 混合检索，将向量召回与关键词召回结合，增强对命令、缩写、配置项和专有名词的召回能力。
+4. 重构 RAG 配置体系，将问题改写、检索、重排、上下文扩展、Prompt 和回答后处理按模块分组，降低配置维护复杂度。
+5. 新增 Search Mode 检索模式，支持 fast、balanced、quality 三种检索策略，避免前端直接暴露底层检索参数。
+6. 设计 DocumentContentLoader 文档读取适配层，将文档解析流程从本地路径读取解耦为多来源 InputStream 加载机制，当前支持本地上传文件，后续可扩展 LabLink 云盘文件、远程 URL 和 MinIO 文件。
+
 ## 后续计划
 后续可以继续增强以下方向：
-1. Reranker 重排，提高召回片段排序质量。
-2. Hybrid Search，引入关键词检索与向量检索融合。
-3. 文档来源扩展，为接入 LabLink 云盘文件做准备。
-4. OCR 解析支持，处理扫描版 PDF。
-5. Prompt 模板数据库化，支持用户自定义模板。
-6. LabLink 接入，实现云盘文件一键加入知识库。
+1. 文档来源扩展，为接入 LabLink 云盘文件做准备。
+2. OCR 解析支持，处理扫描版 PDF。
+3. Prompt 模板数据库化，支持用户自定义模板。
+4. LabLink 接入，实现云盘文件一键加入知识库。

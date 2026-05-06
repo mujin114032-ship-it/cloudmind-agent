@@ -5,14 +5,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * Reranker 服务配置。
+ * Reranker 模型配置。
  */
 @Data
 @Component
-@ConfigurationProperties(prefix = "cloudmind.reranker.local")
+@ConfigurationProperties(prefix = "cloudmind.ai.reranker")
 public class RerankerProperties {
-
-    private String baseUrl = "http://localhost:9001";
 
     private String model = "BAAI/bge-reranker-base";
 

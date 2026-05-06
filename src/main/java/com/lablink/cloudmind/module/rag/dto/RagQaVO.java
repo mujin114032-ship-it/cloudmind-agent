@@ -32,4 +32,6 @@ public class RagQaVO {
     private Long llmCostMs;
 
     private Long totalCostMs;
+
+    private String searchMode;
 }

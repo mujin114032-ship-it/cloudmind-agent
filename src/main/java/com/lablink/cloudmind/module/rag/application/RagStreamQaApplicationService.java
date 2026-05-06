@@ -107,6 +107,7 @@ public class RagStreamQaApplicationService {
             retrievalDone.put("resultCount", references.size());
             retrievalDone.put("references", references);
             retrievalDone.put("retrievalCostMs", retrievalCostMs);
+            retrievalDone.put("searchMode", retrievalResult.getSearchMode());
             sendEvent(emitter, "retrieval_done", retrievalDone);
 
             String promptVersion = ragPromptBuilder.resolvePromptVersion(request.getPromptVersion());
@@ -162,6 +163,7 @@ public class RagStreamQaApplicationService {
             doneData.put("llmCostMs", llmCostMs);
             doneData.put("totalCostMs", totalCostMs);
             doneData.put("references", references);
+            doneData.put("searchMode", retrievalResult.getSearchMode());
 
             sendEvent(emitter, "answer_done", doneData);
 

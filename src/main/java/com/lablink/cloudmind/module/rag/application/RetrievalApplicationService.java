@@ -9,6 +9,8 @@ import com.lablink.cloudmind.module.knowledge.service.DocumentChunkService;
 import com.lablink.cloudmind.module.knowledge.service.KnowledgeBaseService;
 import com.lablink.cloudmind.module.knowledge.service.KnowledgeDocumentService;
 import com.lablink.cloudmind.module.rag.config.RagProperties;
+import com.lablink.cloudmind.module.rag.config.RagSearchOptions;
+import com.lablink.cloudmind.module.rag.config.RagSearchOptionsResolver;
 import com.lablink.cloudmind.module.rag.context.ContextExpansionService;
 import com.lablink.cloudmind.module.rag.dto.RetrievalTestRequest;
 import com.lablink.cloudmind.module.rag.dto.RetrievalTestVO;
@@ -51,6 +53,8 @@ public class RetrievalApplicationService {
 
     private final RagProperties ragProperties;
 
+    private final RagSearchOptionsResolver ragSearchOptionsResolver;
+
     private final RerankerClient rerankerClient;
 
     private final VectorStoreService vectorStoreService;
@@ -64,11 +68,17 @@ public class RetrievalApplicationService {
 
         KnowledgeBase knowledgeBase = knowledgeBaseService.getCurrentUserKnowledgeBase(knowledgeBaseId);
 
-        int topK = request.getTopK() == null || request.getTopK() <= 0 ? 5 : request.getTopK();
-        double scoreThreshold = request.getScoreThreshold() == null ? 0.3 : request.getScoreThreshold();
+        RagSearchOptions options = ragSearchOptionsResolver.resolve(
+                request.getSearchMode(),
+                request.getTopK(),
+                request.getScoreThreshold()
+        );
 
-        int candidateTopK = Boolean.TRUE.equals(ragProperties.getRerankEnabled())
-                ? Math.max(topK, ragProperties.getCandidateTopK() == null ? 20 : ragProperties.getCandidateTopK())
+        int topK = options.getTopK();
+        double scoreThreshold = options.getScoreThreshold();
+
+        int candidateTopK = Boolean.TRUE.equals(options.getRerankEnabled())
+                ? Math.max(topK, options.getVectorCandidateTopK())
                 : topK;
 
         // 1. 向量召回
@@ -87,12 +97,12 @@ public class RetrievalApplicationService {
                 .toList();
 
         // 3. 关键词召回
-        List<KeywordSearchResult> keywordResults = Boolean.TRUE.equals(ragProperties.getHybridSearchEnabled())
+        List<KeywordSearchResult> keywordResults = Boolean.TRUE.equals(options.getKeywordEnabled())
                 ? keywordSearchService.search(
                 knowledgeBase.getId(),
                 userId,
                 request.getQuery(),
-                ragProperties.getKeywordCandidateTopK()
+                options.getKeywordCandidateTopK()
         )
                 : List.of();
 
@@ -106,21 +116,26 @@ public class RetrievalApplicationService {
         List<RetrievedChunkVO> rerankedHitChunks = applyRerank(
                 request.getQuery(),
                 rawHitChunks,
-                topK
+                topK,
+                options
         );
 
         // 6. 这里只做去重、单文档限制，不再按 scoreThreshold 过滤
         List<RetrievedChunkVO> filteredHitChunks = retrievalResultFilterService.filterHitChunks(
                 rerankedHitChunks,
-                scoreThreshold
+                options
         );
 
         // 7. 相邻 Chunk 扩展
-        List<RetrievedChunkVO> expandedContextChunks = contextExpansionService.expand(filteredHitChunks);
+        List<RetrievedChunkVO> expandedContextChunks = contextExpansionService.expand(
+                filteredHitChunks,
+                options
+        );
 
         // 8. 扩展结果最终去重与截断
         List<RetrievedChunkVO> finalContextChunks = retrievalResultFilterService.filterContextChunks(
-                expandedContextChunks
+                expandedContextChunks,
+                options
         );
 
         for (int i = 0; i < finalContextChunks.size(); i++) {
@@ -136,6 +151,7 @@ public class RetrievalApplicationService {
         vo.setResultCount(finalContextChunks.size());
         vo.setCostMs(System.currentTimeMillis() - start);
         vo.setResults(finalContextChunks);
+        vo.setSearchMode(request.getSearchMode());
         return vo;
     }
 
@@ -237,9 +253,10 @@ public class RetrievalApplicationService {
     private List<RetrievedChunkVO> applyRerank(
             String query,
             List<RetrievedChunkVO> rawHitChunks,
-            Integer topK
+            Integer topK,
+            RagSearchOptions options
     ) {
-        if (!Boolean.TRUE.equals(ragProperties.getRerankEnabled())) {
+        if (!Boolean.TRUE.equals(options.getRerankEnabled())) {
             return rawHitChunks.stream()
                     .limit(topK)
                     .toList();
@@ -261,8 +278,7 @@ public class RetrievalApplicationService {
                     .toList();
         }
 
-        List<RetrievedChunkVO> reranked = new java.util.ArrayList<>();
-
+        List<RetrievedChunkVO> reranked = new ArrayList<>();
         int rank = 1;
 
         for (RerankResponse.RerankItem item : rerankResponse.getResults()) {

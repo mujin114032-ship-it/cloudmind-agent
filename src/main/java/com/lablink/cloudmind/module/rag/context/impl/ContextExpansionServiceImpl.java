@@ -5,6 +5,7 @@ import com.lablink.cloudmind.module.knowledge.entity.KnowledgeDocument;
 import com.lablink.cloudmind.module.knowledge.service.DocumentChunkService;
 import com.lablink.cloudmind.module.knowledge.service.KnowledgeDocumentService;
 import com.lablink.cloudmind.module.rag.config.RagProperties;
+import com.lablink.cloudmind.module.rag.config.RagSearchOptions;
 import com.lablink.cloudmind.module.rag.context.ContextExpansionService;
 import com.lablink.cloudmind.module.rag.model.RetrievedChunkVO;
 import lombok.RequiredArgsConstructor;
@@ -31,18 +32,18 @@ public class ContextExpansionServiceImpl implements ContextExpansionService {
     private final KnowledgeDocumentService knowledgeDocumentService;
 
     @Override
-    public List<RetrievedChunkVO> expand(List<RetrievedChunkVO> hitChunks) {
+    public List<RetrievedChunkVO> expand(List<RetrievedChunkVO> hitChunks, RagSearchOptions options) {
         if (CollectionUtils.isEmpty(hitChunks)) {
             return List.of();
         }
 
-        if (!Boolean.TRUE.equals(ragProperties.getContextExpansionEnabled())) {
+        if (!Boolean.TRUE.equals(options.getContextExpansionEnabled())) {
             markHitChunks(hitChunks);
             return hitChunks;
         }
 
-        int before = safeValue(ragProperties.getContextWindowBefore(), 1);
-        int after = safeValue(ragProperties.getContextWindowAfter(), 1);
+        int before = safeValue(options.getContextWindowBefore(), 1);
+        int after = safeValue(options.getContextWindowAfter(), 1);
         int maxContextChunks = safeValue(ragProperties.getMaxContextChunks(), 15);
 
         Map<Long, String> fileNameCache = new LinkedHashMap<>();

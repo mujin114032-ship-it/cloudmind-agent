@@ -3,6 +3,7 @@ package com.lablink.cloudmind.module.embedding.client;
 import com.alibaba.fastjson2.JSON;
 import com.lablink.cloudmind.common.enums.ErrorCode;
 import com.lablink.cloudmind.common.exception.BusinessException;
+import com.lablink.cloudmind.module.ai.config.AiServiceProperties;
 import com.lablink.cloudmind.module.embedding.config.EmbeddingProperties;
 import com.lablink.cloudmind.module.embedding.dto.EmbeddingBatchResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -35,10 +36,16 @@ public class LocalBgeEmbeddingClient implements EmbeddingClient {
 
     private final EmbeddingProperties properties;
 
+    private final AiServiceProperties aiServiceProperties;
+
     private final HttpClient httpClient;
 
-    public LocalBgeEmbeddingClient(EmbeddingProperties properties) {
+    public LocalBgeEmbeddingClient(
+            EmbeddingProperties properties,
+            AiServiceProperties aiServiceProperties
+    ) {
         this.properties = properties;
+        this.aiServiceProperties = aiServiceProperties;
 
         // Uvicorn/FastAPI 对 h2c upgrade 支持不好，这里强制使用 HTTP/1.1，避免请求体丢失。
         this.httpClient = HttpClient.newBuilder()
@@ -100,7 +107,7 @@ public class LocalBgeEmbeddingClient implements EmbeddingClient {
             requestBody.put("batchSize", properties.getBatchSize());
 
             String jsonBody = JSON.toJSONString(requestBody);
-            String url = properties.getBaseUrl() + "/embedBatch";
+            String url = aiServiceProperties.getBaseUrl() + "/embedBatch";
 
             log.info("调用本地 Embedding 服务：url={}, mode={}, textCount={}, batchSize={}",
                     url,

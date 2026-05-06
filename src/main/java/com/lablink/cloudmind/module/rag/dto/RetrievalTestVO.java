@@ -35,4 +35,6 @@ public class RetrievalTestVO {
     private Long costMs;
 
     private List<RetrievedChunkVO> results;
+
+    private String searchMode;
 }

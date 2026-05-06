@@ -12,34 +12,106 @@ spring:
     password: 数据库密码
 
 cloudmind:
-  embedding:
-    local:
-      base-url: http://127.0.0.1:9001
+  storage:
+    local-root: ./data/uploads
+
+  ai:
+    service:
+      base-url: http://localhost:9001
+
+    embedding:
       model: BAAI/bge-base-zh-v1.5
       dimension: 768
       batch-size: 32
-
-  milvus:
-    uri: http://127.0.0.1:19530
-    token: root:Milvus
-    collection-name: knowledge_chunk_vector
-    vector-field-name: embedding
-    primary-field-name: chunk_id
-    dimension: 768
-
-  llm:
-    openai-compatible:
-      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-      api-key: key
-      model: qwen-plus
       timeout-seconds: 60
 
+    reranker:
+      model: BAAI/bge-reranker-base
+      batch-size: 16
+      timeout-seconds: 60
+
+    llm:
+      openai-compatible:
+        base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+        api-key: ${CLOUDMIND_LLM_OPENAI_COMPATIBLE_API_KEY}
+        model: qwen-plus
+        timeout-seconds: 60
+
   rag:
-    query-rewrite-enabled: true         # 是否开启查询重写
-    chat-history-rewrite-enabled: true  # 是否开启聊天历史重写
-    query-rewrite-history-limit: 6      # 查询重写历史记录限制
-    query-rewrite-max-length: 300      # 改写问题最大长度
-    context-expansion-enabled: true     # 是否开启上下文扩展
-    context-window-before: 1            # 上下文扩展前向窗口大小
-    context-window-after: 1             # 上下文扩展后向窗口大小
-    max-context-chunks: 20              # 最大上下文块数
+    rewrite:
+      enabled: true
+      history-enabled: true
+      history-gate-enabled: true
+      history-limit: 6
+      max-length: 300
+
+    retrieval:
+      vector:
+        candidate-top-k: 20
+        min-score-threshold: 0.2
+
+      keyword:
+        enabled: true
+        candidate-top-k: 20
+
+      rerank:
+        enabled: true
+        top-k: 5
+
+      filter:
+        remove-duplicate-chunks: true
+        max-hit-chunks-per-document: 3
+
+      context:
+        expansion-enabled: true
+        window-before: 1
+        window-after: 1
+        max-context-chunks: 20
+
+    prompt:
+      default-version: basic-v1
+
+    answer:
+      post-process-enabled: true
+
+    default-search-mode: balanced
+
+    profiles:
+      fast:
+        top-k: 4
+        score-threshold: 0.25
+        vector-candidate-top-k: 8
+        keyword-enabled: true
+        keyword-candidate-top-k: 8
+        rerank-enabled: false
+        context-expansion-enabled: true
+        context-window-before: 0
+        context-window-after: 1
+        max-context-chunks: 6
+        max-hit-chunks-per-document: 2
+
+      balanced:
+        top-k: 5
+        score-threshold: 0.2
+        vector-candidate-top-k: 20
+        keyword-enabled: true
+        keyword-candidate-top-k: 20
+        rerank-enabled: true
+        context-expansion-enabled: true
+        context-window-before: 1
+        context-window-after: 1
+        max-context-chunks: 12
+        max-hit-chunks-per-document: 3
+
+      quality:
+        top-k: 8
+        score-threshold: 0.15
+        vector-candidate-top-k: 40
+        keyword-enabled: true
+        keyword-candidate-top-k: 30
+        rerank-enabled: true
+        context-expansion-enabled: true
+        context-window-before: 2
+        context-window-after: 2
+        max-context-chunks: 20
+        max-hit-chunks-per-document: 5

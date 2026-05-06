@@ -18,4 +18,8 @@ public class RetrievalTestRequest {
      * 相似度阈值，低于该分数的结果会被过滤。
      */
     private Double scoreThreshold = 0.3;
+
+    private String promptVersion;
+
+    private String searchMode;
 }

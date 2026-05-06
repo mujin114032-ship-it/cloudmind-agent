@@ -14,6 +14,7 @@ import com.lablink.cloudmind.module.knowledge.dto.AddKnowledgeDocumentRequest;
 import com.lablink.cloudmind.module.knowledge.dto.KnowledgeDocumentQueryRequest;
 import com.lablink.cloudmind.module.knowledge.entity.KnowledgeBase;
 import com.lablink.cloudmind.module.knowledge.entity.KnowledgeDocument;
+import com.lablink.cloudmind.module.knowledge.enums.DocumentSourceTypeEnum;
 import com.lablink.cloudmind.module.knowledge.enums.IngestStatusEnum;
 import com.lablink.cloudmind.module.knowledge.enums.ParseStatusEnum;
 import com.lablink.cloudmind.module.knowledge.mapper.KnowledgeDocumentMapper;
@@ -76,6 +77,8 @@ public class KnowledgeDocumentServiceImpl extends ServiceImpl<KnowledgeDocumentM
         document.setEmbeddingModel(DEFAULT_EMBEDDING_MODEL);
         document.setEmbeddingDim(DEFAULT_EMBEDDING_DIM);
         document.setDeleted(0);
+        document.setSourceType(DocumentSourceTypeEnum.UPLOAD.getCode());
+        document.setErrorMessage(null);
 
         boolean saved = this.save(document);
         if (!saved) {
@@ -155,6 +158,9 @@ public class KnowledgeDocumentServiceImpl extends ServiceImpl<KnowledgeDocumentM
         document.setFileType(fileType);
         document.setFileSize(storedFile.getFileSize());
         document.setStorageType(storedFile.getStorageType());
+        document.setSourceType(DocumentSourceTypeEnum.UPLOAD.getCode());
+        document.setExternalFileId(null);
+        document.setExternalFileUrl(null);
         document.setStoragePath(storedFile.getStoragePath());
         document.setContentType(storedFile.getContentType());
         document.setParserType(DEFAULT_PARSER_TYPE);
@@ -310,6 +316,9 @@ public class KnowledgeDocumentServiceImpl extends ServiceImpl<KnowledgeDocumentM
         vo.setStorageType(document.getStorageType());
         vo.setStoragePath(document.getStoragePath());
         vo.setContentType(document.getContentType());
+        vo.setSourceType(document.getSourceType());
+        vo.setExternalFileId(document.getExternalFileId());
+        vo.setExternalFileUrl(document.getExternalFileUrl());
         return vo;
     }
 }

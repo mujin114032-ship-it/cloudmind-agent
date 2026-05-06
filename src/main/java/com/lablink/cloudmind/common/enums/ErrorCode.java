@@ -31,6 +31,8 @@ public enum ErrorCode {
     DOCUMENT_CHUNK_EMPTY(44003, "文档解析结果为空"),
     DOCUMENT_NOT_PARSED(44004, "文档尚未解析成功"),
     DOCUMENT_CHUNK_NOT_FOUND(44005, "文档分块不存在"),
+    DOCUMENT_LOAD_ERROR(44006, "文档读取失败"),
+    DOCUMENT_SOURCE_NOT_SUPPORTED(44007, "不支持的文档来源"),
 
     INGEST_TASK_NOT_FOUND(45001, "入库任务不存在"),
     INGEST_TASK_RUNNING(45002, "文档入库任务正在执行中"),

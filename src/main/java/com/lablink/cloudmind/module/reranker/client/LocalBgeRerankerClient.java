@@ -3,6 +3,7 @@ package com.lablink.cloudmind.module.reranker.client;
 import com.alibaba.fastjson2.JSON;
 import com.lablink.cloudmind.common.enums.ErrorCode;
 import com.lablink.cloudmind.common.exception.BusinessException;
+import com.lablink.cloudmind.module.ai.config.AiServiceProperties;
 import com.lablink.cloudmind.module.reranker.config.RerankerProperties;
 import com.lablink.cloudmind.module.reranker.dto.RerankRequest;
 import com.lablink.cloudmind.module.reranker.dto.RerankResponse;
@@ -27,10 +28,16 @@ public class LocalBgeRerankerClient implements RerankerClient {
 
     private final RerankerProperties properties;
 
+    private final AiServiceProperties aiServiceProperties;
+
     private final HttpClient httpClient;
 
-    public LocalBgeRerankerClient(RerankerProperties properties) {
+    public LocalBgeRerankerClient(
+            RerankerProperties properties,
+            AiServiceProperties aiServiceProperties
+    ) {
         this.properties = properties;
+        this.aiServiceProperties = aiServiceProperties;
         this.httpClient = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(10))
@@ -56,7 +63,7 @@ public class LocalBgeRerankerClient implements RerankerClient {
             body.setTopK(topK);
             body.setBatchSize(properties.getBatchSize());
 
-            String url = properties.getBaseUrl() + "/rerank";
+            String url = aiServiceProperties.getBaseUrl() + "/rerank";
             String jsonBody = JSON.toJSONString(body);
 
             log.info("调用本地 Reranker 服务：url={}, documentCount={}, topK={}",
@@ -101,7 +108,7 @@ public class LocalBgeRerankerClient implements RerankerClient {
     }
 
     private void validateConfig() {
-        if (!StringUtils.hasText(properties.getBaseUrl())) {
+        if (!StringUtils.hasText(aiServiceProperties.getBaseUrl())) {
             throw new BusinessException(ErrorCode.RERANKER_SERVICE_ERROR, "Reranker baseUrl 未配置");
         }
     }

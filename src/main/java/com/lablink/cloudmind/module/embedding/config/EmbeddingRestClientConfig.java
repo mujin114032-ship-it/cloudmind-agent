@@ -1,5 +1,6 @@
 package com.lablink.cloudmind.module.embedding.config;
 
+import com.lablink.cloudmind.module.ai.config.AiServiceProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
@@ -15,10 +16,10 @@ public class EmbeddingRestClientConfig {
     @Bean
     public RestClient embeddingRestClient(
             RestClient.Builder restClientBuilder,
-            EmbeddingProperties properties
+            AiServiceProperties aiServiceProperties
     ) {
         return restClientBuilder
-                .baseUrl(properties.getBaseUrl())
+                .baseUrl(aiServiceProperties.getBaseUrl())
                 .build();
     }
 }

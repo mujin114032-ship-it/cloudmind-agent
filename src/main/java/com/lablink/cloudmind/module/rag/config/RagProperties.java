@@ -4,89 +4,219 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
- * RAG 相关配置。
+ * RAG 策略配置。
+ *
+ * <p>按 rewrite、retrieval、prompt、answer 分组，避免配置平铺导致维护困难。</p>
  */
 @Data
 @Component
 @ConfigurationProperties(prefix = "cloudmind.rag")
 public class RagProperties {
 
-    private Boolean queryRewriteEnabled = true;
+    private Rewrite rewrite = new Rewrite();
 
-    private Boolean chatHistoryRewriteEnabled = true;
+    private Retrieval retrieval = new Retrieval();
 
-    private Integer queryRewriteHistoryLimit = 6;
+    private Prompt prompt = new Prompt();
 
-    private Integer queryRewriteMaxLength = 300;
+    private Answer answer = new Answer();
 
-    /**
-     * 是否启用相邻 Chunk 扩展。
+    private String defaultSearchMode = "balanced";
+
+    private Map<String, SearchProfile> profiles = new HashMap<>();
+
+    @Data
+    public static class Rewrite {
+
+        private Boolean enabled = true;
+
+        private Boolean historyEnabled = true;
+
+        private Boolean historyGateEnabled = true;
+
+        private Integer historyLimit = 6;
+
+        private Integer maxLength = 300;
+    }
+
+    @Data
+    public static class Retrieval {
+
+        private Vector vector = new Vector();
+
+        private Keyword keyword = new Keyword();
+
+        private Rerank rerank = new Rerank();
+
+        private Filter filter = new Filter();
+
+        private Context context = new Context();
+    }
+
+    @Data
+    public static class Vector {
+
+        private Integer candidateTopK = 20;
+
+        private Double minScoreThreshold = 0.2;
+    }
+
+    @Data
+    public static class Keyword {
+
+        private Boolean enabled = true;
+
+        private Integer candidateTopK = 20;
+    }
+
+    @Data
+    public static class Rerank {
+
+        private Boolean enabled = true;
+
+        private Integer topK = 5;
+    }
+
+    @Data
+    public static class Filter {
+
+        private Boolean removeDuplicateChunks = true;
+
+        private Integer maxHitChunksPerDocument = 3;
+    }
+
+    @Data
+    public static class Context {
+
+        private Boolean expansionEnabled = true;
+
+        private Integer windowBefore = 1;
+
+        private Integer windowAfter = 1;
+
+        private Integer maxContextChunks = 20;
+    }
+
+    @Data
+    public static class Prompt {
+
+        private String defaultVersion = "basic-v1";
+    }
+
+    @Data
+    public static class Answer {
+
+        private Boolean postProcessEnabled = true;
+    }
+
+    @Data
+    public static class SearchProfile {
+
+        private Integer topK = 5;
+
+        private Double scoreThreshold = 0.2;
+
+        private Integer vectorCandidateTopK = 20;
+
+        private Boolean keywordEnabled = true;
+
+        private Integer keywordCandidateTopK = 20;
+
+        private Boolean rerankEnabled = true;
+
+        private Boolean contextExpansionEnabled = true;
+
+        private Integer contextWindowBefore = 1;
+
+        private Integer contextWindowAfter = 1;
+
+        private Integer maxContextChunks = 12;
+
+        private Integer maxHitChunksPerDocument = 3;
+    }
+
+    /*
+     * 兼容旧代码的 getter。
+     * 等业务代码全部替换为分组 getter 后，可以删除这一段。
      */
-    private Boolean contextExpansionEnabled = true;
 
-    /**
-     * 命中 chunk 前面补几个 chunk。
-     */
-    private Integer contextWindowBefore = 1;
+    public Boolean getQueryRewriteEnabled() {
+        return rewrite.getEnabled();
+    }
 
-    /**
-     * 命中 chunk 后面补几个 chunk。
-     */
-    private Integer contextWindowAfter = 1;
+    public Boolean getChatHistoryRewriteEnabled() {
+        return rewrite.getHistoryEnabled();
+    }
 
-    /**
-     * 最终进入 Prompt 的最大上下文 chunk 数。
-     */
-    private Integer maxContextChunks = 20;
+    public Boolean getQueryRewriteHistoryGateEnabled() {
+        return rewrite.getHistoryGateEnabled();
+    }
 
-    /**
-     * 系统级最低检索分数阈值。
-     */
-    private Double retrievalMinScoreThreshold = 0.2;
+    public Integer getQueryRewriteHistoryLimit() {
+        return rewrite.getHistoryLimit();
+    }
 
-    /**
-     * 是否开启重复 chunk 去重。
-     */
-    private Boolean removeDuplicateChunksEnabled = true;
+    public Integer getQueryRewriteMaxLength() {
+        return rewrite.getMaxLength();
+    }
 
-    /**
-     * 单篇文档最多保留几个向量直接命中 chunk。
-     */
-    private Integer maxHitChunksPerDocument = 3;
+    public Boolean getContextExpansionEnabled() {
+        return retrieval.getContext().getExpansionEnabled();
+    }
 
-    /**
-     * 是否启用历史使用门控。
-     *
-     * <p>开启后，只有当前问题存在指代或省略时，才结合历史消息改写。</p>
-     */
-    private Boolean queryRewriteHistoryGateEnabled = true;
+    public Integer getContextWindowBefore() {
+        return retrieval.getContext().getWindowBefore();
+    }
 
-    /**
-     * 默认 Prompt 版本。
-     *
-     * <p>当前端没有指定 promptVersion 时使用。</p>
-     */
-    private String defaultPromptVersion = "basic-v1";
+    public Integer getContextWindowAfter() {
+        return retrieval.getContext().getWindowAfter();
+    }
 
-    /**
-     * 是否启用回答后处理。
-     */
-    private Boolean answerPostProcessEnabled = true;
+    public Integer getMaxContextChunks() {
+        return retrieval.getContext().getMaxContextChunks();
+    }
 
-    private Boolean rerankEnabled = true;
+    public Double getRetrievalMinScoreThreshold() {
+        return retrieval.getVector().getMinScoreThreshold();
+    }
 
-    private Integer candidateTopK = 20;
+    public Boolean getRemoveDuplicateChunksEnabled() {
+        return retrieval.getFilter().getRemoveDuplicateChunks();
+    }
 
-    private Integer rerankTopK = 5;
+    public Integer getMaxHitChunksPerDocument() {
+        return retrieval.getFilter().getMaxHitChunksPerDocument();
+    }
 
-    /**
-     * 是否启用混合检索。
-     */
-    private Boolean hybridSearchEnabled = true;
+    public Boolean getRerankEnabled() {
+        return retrieval.getRerank().getEnabled();
+    }
 
-    /**
-     * 关键词召回候选数量。
-     */
-    private Integer keywordCandidateTopK = 20;
+    public Integer getCandidateTopK() {
+        return retrieval.getVector().getCandidateTopK();
+    }
+
+    public Integer getRerankTopK() {
+        return retrieval.getRerank().getTopK();
+    }
+
+    public Boolean getHybridSearchEnabled() {
+        return retrieval.getKeyword().getEnabled();
+    }
+
+    public Integer getKeywordCandidateTopK() {
+        return retrieval.getKeyword().getCandidateTopK();
+    }
+
+    public String getDefaultPromptVersion() {
+        return prompt.getDefaultVersion();
+    }
+
+    public Boolean getAnswerPostProcessEnabled() {
+        return answer.getPostProcessEnabled();
+    }
 }

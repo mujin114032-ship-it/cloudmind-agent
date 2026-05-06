@@ -1,6 +1,7 @@
 package com.lablink.cloudmind.module.rag.filter.impl;
 
 import com.lablink.cloudmind.module.rag.config.RagProperties;
+import com.lablink.cloudmind.module.rag.config.RagSearchOptions;
 import com.lablink.cloudmind.module.rag.filter.RetrievalResultFilterService;
 import com.lablink.cloudmind.module.rag.model.RetrievedChunkVO;
 import lombok.RequiredArgsConstructor;
@@ -24,13 +25,13 @@ public class RetrievalResultFilterServiceImpl implements RetrievalResultFilterSe
     @Override
     public List<RetrievedChunkVO> filterHitChunks(
             List<RetrievedChunkVO> hitChunks,
-            Double ignoredScoreThreshold
+            RagSearchOptions options
     ) {
         if (CollectionUtils.isEmpty(hitChunks)) {
             return List.of();
         }
 
-        int maxPerDocument = safePositive(ragProperties.getMaxHitChunksPerDocument(), 3);
+        int maxPerDocument = safePositive(options.getMaxHitChunksPerDocument(), 3);
 
         Set<String> dedupKeys = new HashSet<>();
         Map<String, Integer> documentHitCountMap = new HashMap<>();
@@ -66,12 +67,15 @@ public class RetrievalResultFilterServiceImpl implements RetrievalResultFilterSe
     }
 
     @Override
-    public List<RetrievedChunkVO> filterContextChunks(List<RetrievedChunkVO> contextChunks) {
+    public List<RetrievedChunkVO> filterContextChunks(
+            List<RetrievedChunkVO> contextChunks,
+            RagSearchOptions options
+    ) {
         if (CollectionUtils.isEmpty(contextChunks)) {
             return List.of();
         }
 
-        int maxContextChunks = safePositive(ragProperties.getMaxContextChunks(), 15);
+        int maxContextChunks = safePositive(options.getMaxContextChunks(), 12);
 
         LinkedHashMap<String, RetrievedChunkVO> resultMap = new LinkedHashMap<>();
 
