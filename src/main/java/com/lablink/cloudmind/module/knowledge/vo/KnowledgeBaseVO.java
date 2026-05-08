@@ -30,6 +30,12 @@ public class KnowledgeBaseVO {
 
     private Integer embeddingDim;
 
+    private String sourceType;
+
+    private String externalUserId;
+
+    private String externalUsername;
+
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "Asia/Shanghai")
     private LocalDateTime createTime;
 

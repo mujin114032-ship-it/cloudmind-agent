@@ -41,7 +41,7 @@ public class KnowledgeDocumentServiceImpl extends ServiceImpl<KnowledgeDocumentM
 
     private static final Integer DEFAULT_EMBEDDING_DIM = 768;
 
-    private static final Set<String> SUPPORTED_FILE_TYPES = Set.of("pdf", "docx", "txt", "md", "html");
+    private static final Set<String> SUPPORTED_FILE_TYPES = Set.of("pdf", "doc", "docx", "txt", "md", "html");
 
     private final KnowledgeBaseService knowledgeBaseService;
 
@@ -55,7 +55,7 @@ public class KnowledgeDocumentServiceImpl extends ServiceImpl<KnowledgeDocumentM
         // 复用知识库权限校验，避免用户把文件挂到别人的知识库下。
         KnowledgeBase knowledgeBase = knowledgeBaseService.getCurrentUserKnowledgeBase(knowledgeBaseId);
 
-        // 我们现在还没有把云盘模块接进来。当前先做“知识库文档登记”，让知识库详情页和文档状态先跑通。
+        // 现在还没有把云盘模块接进来。当前先做“知识库文档登记”，让知识库详情页和文档状态先跑通。
         // 后面接入云盘模块后，再完善文件解析逻辑。（FileInfo fileInfo = fileService.getCurrentUserFile(fileId);）
         Long fileId = IdParseUtils.parseLongId(request.getFileId(), "文件ID");
         String fileType = normalizeFileType(request.getFileType());

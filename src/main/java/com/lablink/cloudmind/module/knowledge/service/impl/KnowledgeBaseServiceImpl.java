@@ -31,6 +31,12 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
 
     private static final Integer DEFAULT_EMBEDDING_DIM = 768;
 
+    private static final String SOURCE_TYPE_MANUAL = "manual";
+
+    private static final String SOURCE_TYPE_LABLINK_AUTO = "lablink_auto";
+
+    private static final String LABLINK_KB_SUFFIX = "的 LabLink 私有知识库";
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public KnowledgeBaseVO createKnowledgeBase(CreateKnowledgeBaseRequest request) {
@@ -47,6 +53,9 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
         knowledgeBase.setEmbeddingModel(DEFAULT_EMBEDDING_MODEL);
         knowledgeBase.setEmbeddingDim(DEFAULT_EMBEDDING_DIM);
         knowledgeBase.setDeleted(0);
+        knowledgeBase.setSourceType(SOURCE_TYPE_MANUAL);
+        knowledgeBase.setExternalUserId(null);
+        knowledgeBase.setExternalUsername(null);
 
         boolean saved = this.save(knowledgeBase);
         if (!saved) {
@@ -130,6 +139,50 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
         return knowledgeBase;
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public KnowledgeBase ensureLabLinkPrivateKnowledgeBase(Long labLinkUserId, String username) {
+        if (labLinkUserId == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "LabLink 用户ID不能为空");
+        }
+
+        String externalUserId = String.valueOf(labLinkUserId);
+        String safeUsername = StringUtils.hasText(username) ? username.trim() : externalUserId;
+
+        KnowledgeBase existing = this.lambdaQuery()
+                .eq(KnowledgeBase::getSourceType, SOURCE_TYPE_LABLINK_AUTO)
+                .eq(KnowledgeBase::getExternalUserId, externalUserId)
+                .eq(KnowledgeBase::getUserId, labLinkUserId)
+                .eq(KnowledgeBase::getStatus, KnowledgeBaseStatusEnum.ENABLED.getCode())
+                .one();
+
+        if (existing != null) {
+            return existing;
+        }
+
+        KnowledgeBase knowledgeBase = new KnowledgeBase();
+        knowledgeBase.setUserId(labLinkUserId);
+        knowledgeBase.setName(safeUsername + LABLINK_KB_SUFFIX);
+        knowledgeBase.setDescription("由 LabLink 文件自动构建的用户私有知识库");
+        knowledgeBase.setVisibility(KnowledgeBaseVisibilityEnum.PRIVATE.getCode());
+        knowledgeBase.setStatus(KnowledgeBaseStatusEnum.ENABLED.getCode());
+        knowledgeBase.setDocumentCount(0);
+        knowledgeBase.setChunkCount(0);
+        knowledgeBase.setEmbeddingModel(DEFAULT_EMBEDDING_MODEL);
+        knowledgeBase.setEmbeddingDim(DEFAULT_EMBEDDING_DIM);
+        knowledgeBase.setSourceType(SOURCE_TYPE_LABLINK_AUTO);
+        knowledgeBase.setExternalUserId(externalUserId);
+        knowledgeBase.setExternalUsername(safeUsername);
+        knowledgeBase.setDeleted(0);
+
+        boolean saved = this.save(knowledgeBase);
+        if (!saved) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "创建 LabLink 私有知识库失败");
+        }
+
+        return this.getById(knowledgeBase.getId());
+    }
+
     private KnowledgeBaseVO convertToVO(KnowledgeBase knowledgeBase) {
         if (knowledgeBase == null) {
             return null;
@@ -148,6 +201,9 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
         vo.setChunkCount(knowledgeBase.getChunkCount());
         vo.setEmbeddingModel(knowledgeBase.getEmbeddingModel());
         vo.setEmbeddingDim(knowledgeBase.getEmbeddingDim());
+        vo.setSourceType(knowledgeBase.getSourceType());
+        vo.setExternalUserId(knowledgeBase.getExternalUserId());
+        vo.setExternalUsername(knowledgeBase.getExternalUsername());
         vo.setCreateTime(knowledgeBase.getCreateTime());
         vo.setUpdateTime(knowledgeBase.getUpdateTime());
 

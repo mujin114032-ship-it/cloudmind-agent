@@ -29,13 +29,10 @@ public class LocalDocumentContentLoader implements DocumentContentLoader {
             return false;
         }
 
-        boolean sourceMatched = !StringUtils.hasText(document.getSourceType())
-                || DocumentSourceTypeEnum.UPLOAD.getCode().equals(document.getSourceType());
-
         boolean storageMatched = !StringUtils.hasText(document.getStorageType())
                 || STORAGE_TYPE_LOCAL.equals(document.getStorageType());
 
-        return sourceMatched && storageMatched;
+        return storageMatched && StringUtils.hasText(document.getStoragePath());
     }
 
     @Override

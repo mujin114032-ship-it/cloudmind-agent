@@ -33,6 +33,21 @@ public class KnowledgeBase {
 
     private Integer embeddingDim;
 
+    /**
+     * 知识库来源：manual / lablink_auto。
+     */
+    private String sourceType;
+
+    /**
+     * 外部系统用户 ID，例如 LabLink userId。
+     */
+    private String externalUserId;
+
+    /**
+     * 外部系统用户名，例如 LabLink username。
+     */
+    private String externalUsername;
+
     @TableLogic
     private Integer deleted;
 

@@ -169,6 +169,7 @@ public class RetrievalApplicationService {
                         LinkedHashMap::new
                 ));
 
+
         Map<Long, KeywordSearchResult> keywordResultMap = keywordResults == null
                 ? Map.of()
                 : keywordResults.stream()
