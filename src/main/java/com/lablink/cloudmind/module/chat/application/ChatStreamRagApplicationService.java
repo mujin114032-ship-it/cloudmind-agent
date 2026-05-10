@@ -18,11 +18,15 @@ import com.lablink.cloudmind.module.rag.prompt.RagPromptBuilder;
 import com.lablink.cloudmind.module.rag.rewrite.QueryRewriteService;
 import com.lablink.cloudmind.module.rag.service.RagTraceService;
 import com.lablink.cloudmind.module.rag.application.RetrievalApplicationService;
+import com.lablink.cloudmind.common.enums.ErrorCode;
+import com.lablink.cloudmind.common.exception.BusinessException;
+import com.lablink.cloudmind.module.llm.model.LlmCallContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.util.StringUtils;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -121,11 +125,129 @@ public class ChatStreamRagApplicationService {
                 topK,
                 scoreThreshold,
                 request.getSearchMode(),
+                null,
                 totalStart,
                 emitter
         ));
 
         return emitter;
+    }
+
+    public SseEmitter streamQaForLabLink(
+            Long userId,
+            Long knowledgeBaseId,
+            Long sessionId,
+            RagQaRequest request,
+            LlmCallContext llmCallContext
+    ) {
+        long totalStart = System.currentTimeMillis();
+
+        ChatSession session = getOrCreateLabLinkSession(
+                userId,
+                knowledgeBaseId,
+                sessionId,
+                request.getQuestion()
+        );
+
+        String question = queryPreprocessor.preprocess(request.getQuestion());
+
+        int topK = request.getTopK() == null || request.getTopK() <= 0 ? 5 : request.getTopK();
+        double scoreThreshold = request.getScoreThreshold() == null ? 0.15 : request.getScoreThreshold();
+
+        ChatMessage userMessage = chatMessageService.saveUserMessage(session, question);
+        chatSessionService.touchSession(session.getId(), question);
+
+        List<ChatMessage> recentMessages = chatMessageService.listRecentMessagesBefore(
+                session.getId(),
+                userMessage.getId(),
+                ragProperties.getQueryRewriteHistoryLimit()
+        );
+
+        String rewrittenQuestion = queryRewriteService.rewriteWithHistory(question, recentMessages);
+
+        String requestPromptVersion = request.getPromptVersion();
+
+        ChatMessage assistantMessage = chatMessageService.saveGeneratingAssistantMessage(session);
+
+        Long traceId = ragTraceService.startTrace(
+                session.getKnowledgeBaseId(),
+                RagRequestTypeEnum.STREAM.getCode(),
+                request.getQuestion(),
+                rewrittenQuestion,
+                topK,
+                scoreThreshold
+        );
+
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
+
+        ChatMessageVO userMessageVO = chatMessageService.convertToVO(userMessage);
+        ChatMessageVO assistantMessageVO = chatMessageService.convertToVO(assistantMessage);
+
+        sendEvent(emitter, "message_created", Map.of(
+                "traceId", String.valueOf(traceId),
+                "sessionId", String.valueOf(session.getId()),
+                "userMessage", userMessageVO,
+                "assistantMessage", assistantMessageVO,
+                "rewrittenQuestion", rewrittenQuestion
+        ));
+
+        ragTaskExecutor.execute(() -> doStreamQa(
+                session,
+                assistantMessage,
+                traceId,
+                question,
+                rewrittenQuestion,
+                requestPromptVersion,
+                topK,
+                scoreThreshold,
+                request.getSearchMode(),
+                llmCallContext,
+                totalStart,
+                emitter
+        ));
+
+        return emitter;
+    }
+
+    private ChatSession getOrCreateLabLinkSession(
+            Long userId,
+            Long knowledgeBaseId,
+            Long sessionId,
+            String question
+    ) {
+        if (userId == null || knowledgeBaseId == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "用户ID或知识库ID不能为空");
+        }
+
+        if (sessionId != null) {
+            ChatSession session = chatSessionService.getById(sessionId);
+            if (session == null
+                    || !userId.equals(session.getUserId())
+                    || !knowledgeBaseId.equals(session.getKnowledgeBaseId())
+                    || Integer.valueOf(1).equals(session.getDeleted())) {
+                throw new BusinessException(ErrorCode.NOT_FOUND, "会话不存在");
+            }
+            return session;
+        }
+
+        ChatSession session = new ChatSession();
+        session.setUserId(userId);
+        session.setKnowledgeBaseId(knowledgeBaseId);
+        session.setTitle(buildSessionTitle(question));
+        session.setStatus(1);
+        session.setMessageCount(0);
+        session.setDeleted(0);
+
+        chatSessionService.save(session);
+        return session;
+    }
+
+    private String buildSessionTitle(String question) {
+        if (!StringUtils.hasText(question)) {
+            return "新会话";
+        }
+        String trimmed = question.trim();
+        return trimmed.length() <= 20 ? trimmed : trimmed.substring(0, 20);
     }
 
     private void doStreamQa(
@@ -138,6 +260,7 @@ public class ChatStreamRagApplicationService {
             int topK,
             double scoreThreshold,
             String searchMode,
+            LlmCallContext llmCallContext,
             long totalStart,
             SseEmitter emitter
     ) {
@@ -197,13 +320,13 @@ public class ChatStreamRagApplicationService {
             sendEvent(emitter, "answer_start", Map.of(
                     "traceId", traceIdStr,
                     "assistantMessageId", assistantMessageIdStr,
-                    "modelName", chatClient.modelName(),
+                    "modelName", chatClient.modelName(llmCallContext),
                     "promptVersion", promptVersion
             ));
 
             long llmStart = System.currentTimeMillis();
 
-            chatClient.streamChat(systemPrompt, userPrompt, delta -> {
+            chatClient.streamChat(systemPrompt, userPrompt, llmCallContext, delta -> {
                 answerBuilder.append(delta);
 
                 Map<String, Object> deltaData = new LinkedHashMap<>();
@@ -222,7 +345,7 @@ public class ChatStreamRagApplicationService {
 
             ragTraceService.markSuccess(
                     traceId,
-                    chatClient.modelName(),
+                    chatClient.modelName(llmCallContext),
                     finalAnswer,
                     llmCostMs,
                     totalCostMs
@@ -248,7 +371,7 @@ public class ChatStreamRagApplicationService {
             doneData.put("assistantMessageId", assistantMessageIdStr);
             doneData.put("answer", finalAnswer);
             doneData.put("assistantMessage", assistantMessageVO);
-            doneData.put("modelName", chatClient.modelName());
+            doneData.put("modelName", chatClient.modelName(llmCallContext));
             doneData.put("promptVersion", promptVersion);
             doneData.put("retrievalCostMs", retrievalCostMs);
             doneData.put("llmCostMs", llmCostMs);

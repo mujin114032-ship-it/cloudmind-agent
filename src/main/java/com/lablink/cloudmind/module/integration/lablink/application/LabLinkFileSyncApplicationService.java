@@ -20,6 +20,8 @@ import com.lablink.cloudmind.module.knowledge.service.KnowledgeDocumentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 /**
@@ -44,6 +46,8 @@ public class LabLinkFileSyncApplicationService {
     private final DocumentChunkService documentChunkService;
 
     private final AgentDocumentTypeSupport agentDocumentTypeSupport;
+
+    private final LabLinkDocumentAutoIngestService labLinkDocumentAutoIngestService;
 
     @Transactional(rollbackFor = Exception.class)
     public LabLinkFileSyncVO syncFile(LabLinkFileSyncRequest request) {
@@ -75,7 +79,8 @@ public class LabLinkFileSyncApplicationService {
                 .one();
 
         if (existing != null) {
-            return existed(knowledgeBase, existing);
+            boolean submitted = submitAutoIngestAfterCommitIfNecessary(existing);
+            return existed(knowledgeBase, existing, submitted);
         }
 
         KnowledgeDocument document = new KnowledgeDocument();
@@ -116,10 +121,16 @@ public class LabLinkFileSyncApplicationService {
                 .setSql("document_count = document_count + 1")
                 .update();
 
-        return synced(knowledgeBase, document);
+        submitAutoIngestAfterCommit(document.getId());
+
+        return synced(knowledgeBase, document, true);
     }
 
-    private LabLinkFileSyncVO synced(KnowledgeBase knowledgeBase, KnowledgeDocument document) {
+    private LabLinkFileSyncVO synced(
+            KnowledgeBase knowledgeBase,
+            KnowledgeDocument document,
+            boolean autoIngestSubmitted
+    ) {
         LabLinkFileSyncVO vo = new LabLinkFileSyncVO();
         vo.setSynced(true);
         vo.setSkipped(false);
@@ -132,11 +143,16 @@ public class LabLinkFileSyncApplicationService {
         vo.setStorageType(document.getStorageType());
         vo.setParseStatus(String.valueOf(document.getParseStatus()));
         vo.setIngestStatus(String.valueOf(document.getIngestStatus()));
+        vo.setAutoIngestSubmitted(autoIngestSubmitted);
         return vo;
     }
 
-    private LabLinkFileSyncVO existed(KnowledgeBase knowledgeBase, KnowledgeDocument document) {
-        LabLinkFileSyncVO vo = synced(knowledgeBase, document);
+    private LabLinkFileSyncVO existed(
+            KnowledgeBase knowledgeBase,
+            KnowledgeDocument document,
+            boolean autoIngestSubmitted
+    ) {
+        LabLinkFileSyncVO vo = synced(knowledgeBase, document, autoIngestSubmitted);
         vo.setSynced(false);
         vo.setSkipped(true);
         vo.setSkipReason("already_synced");
@@ -158,6 +174,7 @@ public class LabLinkFileSyncApplicationService {
         vo.setFileName(request.getFileName());
         vo.setSourceType(DocumentSourceTypeEnum.LABLINK_FILE.getCode());
         vo.setStorageType(STORAGE_TYPE_MINIO);
+        vo.setAutoIngestSubmitted(false);
         return vo;
     }
 
@@ -232,5 +249,46 @@ public class LabLinkFileSyncApplicationService {
         } catch (NumberFormatException ex) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "LabLink用户ID格式错误");
         }
+    }
+
+//    private boolean submitAutoIngestAfterCommitIfNecessary(KnowledgeDocument document) {
+//        boolean needParse = document.getParseStatus() == null
+//                || ParseStatusEnum.NOT_PARSED.getCode().equals(document.getParseStatus());
+//
+//        boolean needIngest = document.getIngestStatus() == null
+//                || IngestStatusEnum.NOT_INDEXED.getCode().equals(document.getIngestStatus());
+//
+//        if (!needParse && !needIngest) {
+//            return false;
+//        }
+//
+//        submitAutoIngestAfterCommit(document.getId());
+//        return true;
+//    }
+    // 只要不是 解析成功 + 入库成功，就补偿触发。
+    private boolean submitAutoIngestAfterCommitIfNecessary(KnowledgeDocument document) {
+        boolean needParse = !ParseStatusEnum.SUCCESS.getCode().equals(document.getParseStatus());
+        boolean needIngest = !IngestStatusEnum.SUCCESS.getCode().equals(document.getIngestStatus());
+
+        if (!needParse && !needIngest) {
+            return false;
+        }
+
+        submitAutoIngestAfterCommit(document.getId());
+        return true;
+    }
+
+    private void submitAutoIngestAfterCommit(Long documentId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    labLinkDocumentAutoIngestService.parseAndIngestAsync(documentId);
+                }
+            });
+            return;
+        }
+
+        labLinkDocumentAutoIngestService.parseAndIngestAsync(documentId);
     }
 }

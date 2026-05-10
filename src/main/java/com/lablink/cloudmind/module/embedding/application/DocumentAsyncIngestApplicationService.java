@@ -201,4 +201,47 @@ public class DocumentAsyncIngestApplicationService {
             }
         }
     }
+
+    /**
+     * 内部入库任务提交入口。
+     *
+     * <p>用于 LabLink 文件自动解析后的异步入库，不依赖 UserContext。</p>
+     *
+     * @return taskId；如果文档已经入库成功，则返回 null。
+     */
+    public Long submitIngestTaskInternal(Long documentId) {
+        KnowledgeDocument document = knowledgeDocumentService.getById(documentId);
+
+        if (document == null || Integer.valueOf(1).equals(document.getDeleted())) {
+            throw new BusinessException(ErrorCode.KNOWLEDGE_DOCUMENT_NOT_FOUND);
+        }
+
+        if (!ParseStatusEnum.SUCCESS.getCode().equals(document.getParseStatus())) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_PARSED);
+        }
+
+        if (IngestStatusEnum.SUCCESS.getCode().equals(document.getIngestStatus())) {
+            log.info("LabLink 文档已经入库成功，跳过重复入库：documentId={}", documentId);
+            return null;
+        }
+
+        DocumentIngestTask runningTask = documentIngestTaskService.getRunningTask(
+                document.getId(),
+                document.getUserId()
+        );
+
+        if (runningTask != null) {
+            log.info("LabLink 文档已有运行中的入库任务，跳过重复提交：documentId={}, taskId={}",
+                    documentId,
+                    runningTask.getId());
+            return runningTask.getId();
+        }
+
+        DocumentIngestTask task = documentIngestTaskService.createTask(document);
+
+        documentIngestTaskExecutor.execute(() -> executeTask(task.getId()));
+
+        return task.getId();
+    }
+
 }

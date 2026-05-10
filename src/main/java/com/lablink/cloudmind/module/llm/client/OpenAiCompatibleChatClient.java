@@ -9,6 +9,7 @@ import com.lablink.cloudmind.module.llm.config.LlmProperties;
 import com.lablink.cloudmind.module.llm.dto.ChatCompletionRequest;
 import com.lablink.cloudmind.module.llm.dto.ChatCompletionResponse;
 import com.lablink.cloudmind.module.llm.dto.ChatMessageDTO;
+import com.lablink.cloudmind.module.llm.model.LlmCallContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -46,11 +47,20 @@ public class OpenAiCompatibleChatClient implements ChatClient {
 
     @Override
     public String chat(String systemPrompt, String userPrompt) {
-        validateConfig();
+        return chat(systemPrompt, userPrompt, null);
+    }
+
+    @Override
+    public String chat(String systemPrompt, String userPrompt, LlmCallContext context) {
+        String apiKey = resolveApiKey(context);
+        String modelName = resolveModelName(context);
+        Integer timeoutSeconds = resolveTimeoutSeconds(context);
+
+        validateConfig(apiKey, modelName);
 
         try {
             ChatCompletionRequest requestBody = new ChatCompletionRequest();
-            requestBody.setModel(properties.getModel());
+            requestBody.setModel(modelName);
             requestBody.setTemperature(0.2);
             requestBody.setStream(false);
             requestBody.setMessages(List.of(
@@ -61,15 +71,18 @@ public class OpenAiCompatibleChatClient implements ChatClient {
             String jsonBody = JSON.toJSONString(requestBody);
             String url = properties.getBaseUrl() + "/chat/completions";
 
-            log.info("调用大模型：url={}, model={}", url, properties.getModel());
+            log.info("调用大模型：url={}, model={}, userId={}",
+                    url,
+                    modelName,
+                    context == null ? null : context.getUserId());
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .version(HttpClient.Version.HTTP_1_1)
-                    .timeout(Duration.ofSeconds(properties.getTimeoutSeconds()))
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
                     .header("Content-Type", "application/json; charset=utf-8")
                     .header("Accept", "application/json")
-                    .header("Authorization", "Bearer " + properties.getApiKey())
+                    .header("Authorization", "Bearer " + apiKey)
                     .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                     .build();
 
@@ -108,11 +121,20 @@ public class OpenAiCompatibleChatClient implements ChatClient {
 
     @Override
     public void streamChat(String systemPrompt, String userPrompt, Consumer<String> onDelta) {
-        validateConfig();
+        streamChat(systemPrompt, userPrompt, null, onDelta);
+    }
+
+    @Override
+    public void streamChat(String systemPrompt, String userPrompt, LlmCallContext context, Consumer<String> onDelta) {
+        String apiKey = resolveApiKey(context);
+        String modelName = resolveModelName(context);
+        Integer timeoutSeconds = resolveTimeoutSeconds(context);
+
+        validateConfig(apiKey, modelName);
 
         try {
             ChatCompletionRequest requestBody = new ChatCompletionRequest();
-            requestBody.setModel(properties.getModel());
+            requestBody.setModel(modelName);
             requestBody.setTemperature(0.2);
             requestBody.setStream(true);
             requestBody.setMessages(List.of(
@@ -123,15 +145,18 @@ public class OpenAiCompatibleChatClient implements ChatClient {
             String jsonBody = JSON.toJSONString(requestBody);
             String url = properties.getBaseUrl() + "/chat/completions";
 
-            log.info("流式调用大模型：url={}, model={}", url, properties.getModel());
+            log.info("流式调用大模型：url={}, model={}, userId={}",
+                    url,
+                    modelName,
+                    context == null ? null : context.getUserId());
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .version(HttpClient.Version.HTTP_1_1)
-                    .timeout(Duration.ofSeconds(properties.getTimeoutSeconds()))
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
                     .header("Content-Type", "application/json; charset=utf-8")
                     .header("Accept", "text/event-stream")
-                    .header("Authorization", "Bearer " + properties.getApiKey())
+                    .header("Authorization", "Bearer " + apiKey)
                     .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                     .build();
 
@@ -207,16 +232,37 @@ public class OpenAiCompatibleChatClient implements ChatClient {
         }
     }
 
-    private void validateConfig() {
+    private String resolveApiKey(LlmCallContext context) {
+        if (context != null && StringUtils.hasText(context.getApiKey())) {
+            return context.getApiKey();
+        }
+        return properties.getApiKey();
+    }
+
+    private String resolveModelName(LlmCallContext context) {
+        if (context != null && StringUtils.hasText(context.getModelName())) {
+            return context.getModelName();
+        }
+        return properties.getModel();
+    }
+
+    private Integer resolveTimeoutSeconds(LlmCallContext context) {
+        if (context != null && context.getTimeoutSeconds() != null && context.getTimeoutSeconds() > 0) {
+            return context.getTimeoutSeconds();
+        }
+        return properties.getTimeoutSeconds();
+    }
+
+    private void validateConfig(String apiKey, String modelName) {
         if (!StringUtils.hasText(properties.getBaseUrl())) {
             throw new BusinessException(ErrorCode.LLM_SERVICE_ERROR, "大模型 baseUrl 未配置");
         }
 
-        if (!StringUtils.hasText(properties.getApiKey())) {
+        if (!StringUtils.hasText(apiKey)) {
             throw new BusinessException(ErrorCode.LLM_SERVICE_ERROR, "大模型 apiKey 未配置");
         }
 
-        if (!StringUtils.hasText(properties.getModel())) {
+        if (!StringUtils.hasText(modelName)) {
             throw new BusinessException(ErrorCode.LLM_SERVICE_ERROR, "大模型 model 未配置");
         }
     }

@@ -43,6 +43,25 @@ public class KnowledgeDocumentParseApplicationService {
 
     public void parseAndChunk(Long documentId) {
         KnowledgeDocument document = knowledgeDocumentService.getCurrentUserDocumentEntity(documentId);
+        doParseAndChunk(document);
+    }
+
+    /**
+     * 内部解析入口。
+     *
+     * <p>用于 LabLink 文件同步后的自动解析，不依赖 UserContext。</p>
+     */
+    public void parseAndChunkInternal(Long documentId) {
+        KnowledgeDocument document = knowledgeDocumentService.getById(documentId);
+        if (document == null || Integer.valueOf(1).equals(document.getDeleted())) {
+            throw new BusinessException(ErrorCode.KNOWLEDGE_DOCUMENT_NOT_FOUND);
+        }
+
+        doParseAndChunk(document);
+    }
+
+    private void doParseAndChunk(KnowledgeDocument document) {
+        Long documentId = document.getId();
 
         knowledgeDocumentService.markParsing(documentId);
 
@@ -69,15 +88,14 @@ public class KnowledgeDocumentParseApplicationService {
 
             /*
              * 兼容旧逻辑：
-             * PDF 场景下，如果 Tika 解析为空，并且当前文档仍然有本地 storagePath，
-             * 则用 PDFBox 再尝试一次。
-             *
-             * 注意：后续如果要支持 LabLink / Remote PDF fallback，
-             * 最好把 PdfTextParser 也改成支持 InputStream。
+             * 只有 local 文档才用 PdfTextParser fallback。
+             * LabLink MinIO 文档的 storagePath 是 objectKey，不是本地路径，不能 Paths.get 后当本地文件解析。
              */
             if (!StringUtils.hasText(text)
                     && isPdf(document)
-                    && StringUtils.hasText(document.getStoragePath())) {
+                    && StringUtils.hasText(document.getStoragePath())
+                    && ("local".equalsIgnoreCase(document.getStorageType())
+                    || !StringUtils.hasText(document.getStorageType()))) {
                 Path filePath = Paths.get(document.getStoragePath());
                 text = pdfTextParser.parse(filePath);
             }

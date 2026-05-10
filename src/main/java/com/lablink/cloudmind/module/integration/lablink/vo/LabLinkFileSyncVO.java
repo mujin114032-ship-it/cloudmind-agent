@@ -29,4 +29,6 @@ public class LabLinkFileSyncVO {
     private String parseStatus;
 
     private String ingestStatus;
+
+    private Boolean autoIngestSubmitted;
 }
