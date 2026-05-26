@@ -11,6 +11,7 @@ import com.lablink.cloudmind.module.integration.lablink.dto.LabLinkSaveLlmKeyReq
 import com.lablink.cloudmind.module.integration.lablink.security.LabLinkJwtAuthService;
 import com.lablink.cloudmind.module.integration.lablink.security.LabLinkUserPrincipal;
 import com.lablink.cloudmind.module.integration.lablink.vo.LabLinkAgentBootstrapVO;
+import com.lablink.cloudmind.module.rag.dto.RagTraceDetailVO;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
@@ -124,5 +125,14 @@ public class LabLinkAgentBrowserController {
 
         labLinkAgentChatApplicationService.deleteSession(principal, sessionId);
         return Result.success();
+    }
+
+    @GetMapping("/traces/{traceId}")
+    public Result<RagTraceDetailVO> getTraceDetail(
+            @RequestHeader("Authorization") String authorization,
+            @PathVariable Long traceId
+    ) {
+        LabLinkUserPrincipal principal = labLinkJwtAuthService.parseAuthorizationHeader(authorization);
+        return Result.success(labLinkAgentChatApplicationService.getTraceDetail(principal, traceId));
     }
 }

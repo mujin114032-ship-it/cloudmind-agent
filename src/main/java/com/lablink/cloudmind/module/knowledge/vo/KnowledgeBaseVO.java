@@ -14,6 +14,8 @@ public class KnowledgeBaseVO {
      */
     private String id;
 
+    private String userId;
+
     private String name;
 
     private String description;

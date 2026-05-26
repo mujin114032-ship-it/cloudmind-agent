@@ -94,16 +94,17 @@ public class KnowledgeDocumentServiceImpl extends ServiceImpl<KnowledgeDocumentM
 
     @Override
     public PageResult<KnowledgeDocumentVO> pageDocuments(Long knowledgeBaseId, KnowledgeDocumentQueryRequest request) {
-        Long userId = UserContext.getCurrentUserId();
-
-        knowledgeBaseService.getCurrentUserKnowledgeBase(knowledgeBaseId);
+        KnowledgeBase knowledgeBase = knowledgeBaseService.getById(knowledgeBaseId);
+        if (knowledgeBase == null || Integer.valueOf(1).equals(knowledgeBase.getDeleted())) {
+            throw new BusinessException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND);
+        }
 
         Long pageNo = request.getPageNo() == null || request.getPageNo() <= 0 ? 1L : request.getPageNo();
         Long pageSize = request.getPageSize() == null || request.getPageSize() <= 0 ? 10L : request.getPageSize();
 
         LambdaQueryWrapper<KnowledgeDocument> wrapper = new LambdaQueryWrapper<>();
+
         wrapper.eq(KnowledgeDocument::getKnowledgeBaseId, knowledgeBaseId)
-                .eq(KnowledgeDocument::getUserId, userId)
                 .like(StringUtils.hasText(request.getKeyword()), KnowledgeDocument::getFileName, request.getKeyword())
                 .orderByDesc(KnowledgeDocument::getCreateTime);
 
@@ -119,7 +120,11 @@ public class KnowledgeDocumentServiceImpl extends ServiceImpl<KnowledgeDocumentM
 
     @Override
     public KnowledgeDocumentVO getDocumentDetail(Long documentId) {
-        KnowledgeDocument document = getCurrentUserDocument(documentId);
+        KnowledgeDocument document = this.getById(documentId);
+        if (document == null || Integer.valueOf(1).equals(document.getDeleted())) {
+            throw new BusinessException(ErrorCode.KNOWLEDGE_DOCUMENT_NOT_FOUND);
+        }
+
         return convertToVO(document);
     }
 
@@ -196,11 +201,12 @@ public class KnowledgeDocumentServiceImpl extends ServiceImpl<KnowledgeDocumentM
     }
 
     @Override
-    public void markParseSuccess(Long documentId, Integer chunkCount) {
+    public void markParseSuccess(Long documentId, Integer chunkCount, String parserType) {
         this.lambdaUpdate()
                 .eq(KnowledgeDocument::getId, documentId)
                 .set(KnowledgeDocument::getParseStatus, ParseStatusEnum.SUCCESS.getCode())
                 .set(KnowledgeDocument::getChunkCount, chunkCount)
+                .set(StringUtils.hasText(parserType), KnowledgeDocument::getParserType, parserType)
                 .set(KnowledgeDocument::getErrorMessage, null)
                 .update();
     }

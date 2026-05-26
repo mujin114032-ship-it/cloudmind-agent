@@ -2,6 +2,7 @@ package com.lablink.cloudmind.module.integration.lablink.application;
 
 import com.lablink.cloudmind.common.enums.ErrorCode;
 import com.lablink.cloudmind.common.exception.BusinessException;
+import com.lablink.cloudmind.common.util.UserContext;
 import com.lablink.cloudmind.module.chat.application.ChatStreamRagApplicationService;
 import com.lablink.cloudmind.module.chat.dto.ChatMessageVO;
 import com.lablink.cloudmind.module.chat.dto.ChatSessionVO;
@@ -17,6 +18,8 @@ import com.lablink.cloudmind.module.llm.entity.UserLlmCredential;
 import com.lablink.cloudmind.module.llm.model.LlmCallContext;
 import com.lablink.cloudmind.module.llm.service.UserLlmCredentialService;
 import com.lablink.cloudmind.module.rag.dto.RagQaRequest;
+import com.lablink.cloudmind.module.rag.dto.RagTraceDetailVO;
+import com.lablink.cloudmind.module.rag.service.RagTraceService;
 import com.lablink.cloudmind.module.security.service.ApiKeyCryptoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -40,6 +43,8 @@ public class LabLinkAgentChatApplicationService {
     private final ChatSessionService chatSessionService;
 
     private final ChatMessageService chatMessageService;
+
+    private final RagTraceService ragTraceService;
 
     private final ChatStreamRagApplicationService chatStreamRagApplicationService;
 
@@ -175,5 +180,19 @@ public class LabLinkAgentChatApplicationService {
         vo.setLastMessageTime(session.getLastMessageTime());
         vo.setCreateTime(session.getCreateTime());
         return vo;
+    }
+
+    public RagTraceDetailVO getTraceDetail(
+            LabLinkUserPrincipal principal,
+            Long traceId
+    ) {
+        Long userId = principal.getUserId();
+
+        UserContext.setCurrentUserId(userId);
+        try {
+            return ragTraceService.getTraceDetail(traceId);
+        } finally {
+            UserContext.clear();
+        }
     }
 }

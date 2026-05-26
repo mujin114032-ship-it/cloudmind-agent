@@ -10,7 +10,7 @@
     </parent>
     <groupId>com.lablink</groupId>
     <artifactId>cloudmind-agent</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.0.2-SNAPSHOT</version>
     <name>cloudmind-agent</name>
     <description>cloudmind-agent</description>
     <url/>

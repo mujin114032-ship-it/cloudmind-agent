@@ -64,9 +64,14 @@ public class KnowledgeDocumentController {
         return Result.success(knowledgeDocumentService.uploadDocumentToKnowledgeBase(knowledgeBaseId, file));
     }
 
+//    @PostMapping("/api/knowledge-documents/{documentId}/parse")
+//    public Result<Void> parseDocument(@PathVariable Long documentId) {
+//        parseApplicationService.parseAndChunk(documentId);
+//        return Result.success();
+//    }
     @PostMapping("/api/knowledge-documents/{documentId}/parse")
     public Result<Void> parseDocument(@PathVariable Long documentId) {
-        parseApplicationService.parseAndChunk(documentId);
+        parseApplicationService.parseAndChunkInternal(documentId);
         return Result.success();
     }
 

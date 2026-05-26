@@ -24,7 +24,7 @@ public interface KnowledgeDocumentService extends IService<KnowledgeDocument> {
 
     void markParsing(Long documentId);
 
-    void markParseSuccess(Long documentId, Integer chunkCount);
+    void markParseSuccess(Long documentId, Integer chunkCount, String parserType);
 
     void markParseFailed(Long documentId, String errorMessage);
 

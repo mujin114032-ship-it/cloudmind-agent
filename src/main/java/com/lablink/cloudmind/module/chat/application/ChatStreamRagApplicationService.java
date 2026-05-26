@@ -1,5 +1,6 @@
 package com.lablink.cloudmind.module.chat.application;
 
+import com.lablink.cloudmind.common.util.UserContext;
 import com.lablink.cloudmind.module.chat.dto.ChatMessageVO;
 import com.lablink.cloudmind.module.chat.entity.ChatMessage;
 import com.lablink.cloudmind.module.chat.entity.ChatSession;
@@ -140,73 +141,88 @@ public class ChatStreamRagApplicationService {
             RagQaRequest request,
             LlmCallContext llmCallContext
     ) {
-        long totalStart = System.currentTimeMillis();
+        UserContext.setCurrentUserId(userId);
 
-        ChatSession session = getOrCreateLabLinkSession(
-                userId,
-                knowledgeBaseId,
-                sessionId,
-                request.getQuestion()
-        );
+        try {
+            long totalStart = System.currentTimeMillis();
 
-        String question = queryPreprocessor.preprocess(request.getQuestion());
+            ChatSession session = getOrCreateLabLinkSession(
+                    userId,
+                    knowledgeBaseId,
+                    sessionId,
+                    request.getQuestion()
+            );
 
-        int topK = request.getTopK() == null || request.getTopK() <= 0 ? 5 : request.getTopK();
-        double scoreThreshold = request.getScoreThreshold() == null ? 0.15 : request.getScoreThreshold();
+            String question = queryPreprocessor.preprocess(request.getQuestion());
 
-        ChatMessage userMessage = chatMessageService.saveUserMessage(session, question);
-        chatSessionService.touchSession(session.getId(), question);
+            int topK = request.getTopK() == null || request.getTopK() <= 0 ? 5 : request.getTopK();
+            double scoreThreshold = request.getScoreThreshold() == null ? 0.15 : request.getScoreThreshold();
 
-        List<ChatMessage> recentMessages = chatMessageService.listRecentMessagesBefore(
-                session.getId(),
-                userMessage.getId(),
-                ragProperties.getQueryRewriteHistoryLimit()
-        );
+            ChatMessage userMessage = chatMessageService.saveUserMessage(session, question);
+            chatSessionService.touchSession(session.getId(), question);
 
-        String rewrittenQuestion = queryRewriteService.rewriteWithHistory(question, recentMessages);
+            List<ChatMessage> recentMessages = chatMessageService.listRecentMessagesBefore(
+                    session.getId(),
+                    userMessage.getId(),
+                    ragProperties.getQueryRewriteHistoryLimit()
+            );
 
-        String requestPromptVersion = request.getPromptVersion();
+            String rewrittenQuestion = queryRewriteService.rewriteWithHistory(question, recentMessages);
 
-        ChatMessage assistantMessage = chatMessageService.saveGeneratingAssistantMessage(session);
+            String requestPromptVersion = request.getPromptVersion();
 
-        Long traceId = ragTraceService.startTrace(
-                session.getKnowledgeBaseId(),
-                RagRequestTypeEnum.STREAM.getCode(),
-                request.getQuestion(),
-                rewrittenQuestion,
-                topK,
-                scoreThreshold
-        );
+            ChatMessage assistantMessage = chatMessageService.saveGeneratingAssistantMessage(session);
 
-        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
+            Long traceId = ragTraceService.startTrace(
+                    session.getKnowledgeBaseId(),
+                    RagRequestTypeEnum.STREAM.getCode(),
+                    request.getQuestion(),
+                    rewrittenQuestion,
+                    topK,
+                    scoreThreshold
+            );
 
-        ChatMessageVO userMessageVO = chatMessageService.convertToVO(userMessage);
-        ChatMessageVO assistantMessageVO = chatMessageService.convertToVO(assistantMessage);
+            SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
 
-        sendEvent(emitter, "message_created", Map.of(
-                "traceId", String.valueOf(traceId),
-                "sessionId", String.valueOf(session.getId()),
-                "userMessage", userMessageVO,
-                "assistantMessage", assistantMessageVO,
-                "rewrittenQuestion", rewrittenQuestion
-        ));
+            ChatMessageVO userMessageVO = chatMessageService.convertToVO(userMessage);
+            ChatMessageVO assistantMessageVO = chatMessageService.convertToVO(assistantMessage);
 
-        ragTaskExecutor.execute(() -> doStreamQa(
-                session,
-                assistantMessage,
-                traceId,
-                question,
-                rewrittenQuestion,
-                requestPromptVersion,
-                topK,
-                scoreThreshold,
-                request.getSearchMode(),
-                llmCallContext,
-                totalStart,
-                emitter
-        ));
+            sendEvent(emitter, "message_created", Map.of(
+                    "traceId", String.valueOf(traceId),
+                    "sessionId", String.valueOf(session.getId()),
+                    "userMessage", userMessageVO,
+                    "assistantMessage", assistantMessageVO,
+                    "rewrittenQuestion", rewrittenQuestion
+            ));
 
-        return emitter;
+            Long labLinkUserId = userId;
+
+            ragTaskExecutor.execute(() -> {
+                UserContext.setCurrentUserId(labLinkUserId);
+                try {
+                    doStreamQa(
+                            session,
+                            assistantMessage,
+                            traceId,
+                            question,
+                            rewrittenQuestion,
+                            requestPromptVersion,
+                            topK,
+                            scoreThreshold,
+                            request.getSearchMode(),
+                            llmCallContext,
+                            totalStart,
+                            emitter
+                    );
+                } finally {
+                    UserContext.clear();
+                }
+            });
+
+            return emitter;
+        } finally {
+            UserContext.clear();
+        }
     }
 
     private ChatSession getOrCreateLabLinkSession(

@@ -3,6 +3,7 @@ package com.lablink.cloudmind.module.knowledge.application;
 import com.lablink.cloudmind.common.enums.ErrorCode;
 import com.lablink.cloudmind.common.exception.BusinessException;
 import com.lablink.cloudmind.module.document.chunker.SlidingWindowTextChunker;
+import com.lablink.cloudmind.module.document.parser.OcrMyPdfParser;
 import com.lablink.cloudmind.module.document.parser.PdfTextParser;
 import com.lablink.cloudmind.module.knowledge.entity.KnowledgeDocument;
 import com.lablink.cloudmind.module.knowledge.loader.DocumentContentLoaderManager;
@@ -15,8 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 
 /**
@@ -36,6 +38,8 @@ public class KnowledgeDocumentParseApplicationService {
     private final TikaDocumentParser tikaDocumentParser;
 
     private final PdfTextParser pdfTextParser;
+
+    private final OcrMyPdfParser ocrMyPdfParser;
 
     private final SlidingWindowTextChunker textChunker;
 
@@ -75,30 +79,9 @@ public class KnowledgeDocumentParseApplicationService {
                     document.getStorageType(),
                     loaderName);
 
-            String text;
-
-            // 第一优先级：通过 DocumentContentLoader 读取文件流，再交给 Tika 解析。
-            try (InputStream inputStream = documentContentLoaderManager.load(document)) {
-                text = tikaDocumentParser.parse(
-                        inputStream,
-                        document.getFileName(),
-                        document.getContentType()
-                );
-            }
-
-            /*
-             * 兼容旧逻辑：
-             * 只有 local 文档才用 PdfTextParser fallback。
-             * LabLink MinIO 文档的 storagePath 是 objectKey，不是本地路径，不能 Paths.get 后当本地文件解析。
-             */
-            if (!StringUtils.hasText(text)
-                    && isPdf(document)
-                    && StringUtils.hasText(document.getStoragePath())
-                    && ("local".equalsIgnoreCase(document.getStorageType())
-                    || !StringUtils.hasText(document.getStorageType()))) {
-                Path filePath = Paths.get(document.getStoragePath());
-                text = pdfTextParser.parse(filePath);
-            }
+            ParsedText parsedText = parseDocumentText(document);
+            String text = parsedText.text();
+            String parserType = parsedText.parserType();
 
             if (!StringUtils.hasText(text)) {
                 throw new BusinessException(
@@ -117,9 +100,10 @@ public class KnowledgeDocumentParseApplicationService {
             }
 
             documentChunkService.replaceDocumentChunks(document, chunks);
-            knowledgeDocumentService.markParseSuccess(documentId, chunks.size());
+            knowledgeDocumentService.markParseSuccess(documentId, chunks.size(), parserType);
 
-            log.info("文档解析完成：documentId={}, chunkCount={}", documentId, chunks.size());
+            log.info("文档解析完成：documentId={}, parserType={}, chunkCount={}",
+                    documentId, parserType, chunks.size());
         } catch (BusinessException ex) {
             knowledgeDocumentService.markParseFailed(documentId, ex.getMessage());
             throw ex;
@@ -133,7 +117,99 @@ public class KnowledgeDocumentParseApplicationService {
         }
     }
 
+    private ParsedText parseDocumentText(KnowledgeDocument document) throws Exception {
+        if (isPdf(document)) {
+            return parsePdfDocument(document);
+        }
+
+        try (InputStream inputStream = documentContentLoaderManager.load(document)) {
+            String text = tikaDocumentParser.parse(
+                    inputStream,
+                    document.getFileName(),
+                    document.getContentType()
+            );
+            return new ParsedText(text, "tika");
+        }
+    }
+
+    /**
+     * PDF 统一解析链路。
+     *
+     * 无论文件来自本地上传还是 LabLink MinIO，
+     * 都先同步为临时文件，再统一走：
+     *
+     * Tika → PDFBox → OCRmyPDF
+     */
+    private ParsedText parsePdfDocument(KnowledgeDocument document) throws Exception {
+        Path tempPdfPath = Files.createTempFile("cloudmind-pdf-", ".pdf");
+
+        try {
+            try (InputStream inputStream = documentContentLoaderManager.load(document)) {
+                Files.copy(inputStream, tempPdfPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            String text = "";
+
+            try (InputStream tikaInputStream = Files.newInputStream(tempPdfPath)) {
+                text = tikaDocumentParser.parse(
+                        tikaInputStream,
+                        document.getFileName(),
+                        document.getContentType()
+                );
+            } catch (BusinessException ex) {
+                log.warn("PDF Tika 解析失败，继续尝试 PDFBox：documentId={}, reason={}",
+                        document.getId(), ex.getMessage());
+            }
+
+            if (isUsefulPdfText(text)) {
+                return new ParsedText(text, "tika");
+            }
+
+            try {
+                text = pdfTextParser.parse(tempPdfPath);
+            } catch (BusinessException ex) {
+                log.warn("PDFBox 解析失败，继续尝试 OCRmyPDF：documentId={}, reason={}",
+                        document.getId(), ex.getMessage());
+            }
+
+            if (isUsefulPdfText(text)) {
+                return new ParsedText(text, "pdfbox");
+            }
+
+            if (ocrMyPdfParser.isEnabled()) {
+                text = ocrMyPdfParser.parse(tempPdfPath);
+                return new ParsedText(text, "ocrmypdf");
+            }
+
+            return new ParsedText(text, "pdfbox");
+        } finally {
+            deleteTempFileQuietly(tempPdfPath);
+        }
+    }
+
+    private boolean isUsefulPdfText(String text) {
+        if (!ocrMyPdfParser.isEnabled()) {
+            return StringUtils.hasText(text);
+        }
+        return ocrMyPdfParser.isExtractedTextUseful(text);
+    }
+
+    private void deleteTempFileQuietly(Path path) {
+        if (path == null) {
+            return;
+        }
+
+        try {
+            Files.deleteIfExists(path);
+        } catch (Exception ex) {
+            log.warn("删除 PDF 解析临时文件失败：path={}, reason={}", path, ex.getMessage());
+        }
+    }
+
     private boolean isPdf(KnowledgeDocument document) {
         return "pdf".equalsIgnoreCase(document.getFileType());
+    }
+
+    private record ParsedText(String text, String parserType) {
     }
 }

@@ -16,7 +16,6 @@ import com.lablink.cloudmind.module.knowledge.enums.KnowledgeBaseVisibilityEnum;
 import com.lablink.cloudmind.module.knowledge.mapper.KnowledgeBaseMapper;
 import com.lablink.cloudmind.module.knowledge.service.KnowledgeBaseService;
 import com.lablink.cloudmind.module.knowledge.vo.KnowledgeBaseVO;
-import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -68,15 +67,25 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
 
     @Override
     public PageResult<KnowledgeBaseVO> pageKnowledgeBases(KnowledgeBaseQueryRequest request) {
-        Long userId = UserContext.getCurrentUserId();
-
         Long pageNo = request.getPageNo() == null || request.getPageNo() <= 0 ? 1L : request.getPageNo();
         Long pageSize = request.getPageSize() == null || request.getPageSize() <= 0 ? 10L : request.getPageSize();
 
         LambdaQueryWrapper<KnowledgeBase> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(KnowledgeBase::getUserId, userId)
-                .eq(KnowledgeBase::getStatus, KnowledgeBaseStatusEnum.ENABLED.getCode())
-                .like(StringUtils.hasText(request.getKeyword()), KnowledgeBase::getName, request.getKeyword())
+
+        wrapper
+                .eq(request.getUserId() != null, KnowledgeBase::getUserId, request.getUserId())
+                .eq(request.getStatus() != null, KnowledgeBase::getStatus, request.getStatus())
+                .eq(StringUtils.hasText(request.getSourceType()), KnowledgeBase::getSourceType, request.getSourceType())
+                .like(StringUtils.hasText(request.getExternalUsername()),
+                        KnowledgeBase::getExternalUsername,
+                        request.getExternalUsername())
+                .and(StringUtils.hasText(request.getKeyword()), w -> w
+                        .like(KnowledgeBase::getName, request.getKeyword())
+                        .or()
+                        .like(KnowledgeBase::getDescription, request.getKeyword())
+                        .or()
+                        .like(KnowledgeBase::getExternalUsername, request.getKeyword())
+                )
                 .orderByDesc(KnowledgeBase::getCreateTime);
 
         Page<KnowledgeBase> page = this.page(new Page<>(pageNo, pageSize), wrapper);
@@ -91,7 +100,11 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
 
     @Override
     public KnowledgeBaseVO getKnowledgeBaseDetail(Long id) {
-        KnowledgeBase knowledgeBase = getCurrentUserKnowledgeBase(id);
+        KnowledgeBase knowledgeBase = this.getById(id);
+        if (knowledgeBase == null || Integer.valueOf(1).equals(knowledgeBase.getDeleted())) {
+            throw new BusinessException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND);
+        }
+
         return convertToVO(knowledgeBase);
     }
 
@@ -192,6 +205,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
 
         // ID 返回给前端时必须转成字符串，避免 JS 精度丢失。
         vo.setId(String.valueOf(knowledgeBase.getId()));
+        vo.setUserId(String.valueOf(knowledgeBase.getUserId()));
 
         vo.setName(knowledgeBase.getName());
         vo.setDescription(knowledgeBase.getDescription());
